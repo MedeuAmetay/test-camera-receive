@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Server Capture Control</title>
+    <style>
+        body { font-family: system-ui, Arial, sans-serif; margin: 0; background: #f5f7fb; color: #111; }
+        .wrap { max-width: 1300px; margin: 0 auto; padding: 20px; }
+        .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+        .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .pill { border: 1px solid #d1d5db; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+        .status-on { background: #ecfdf5; border-color: #10b981; color: #065f46; }
+        .status-off { background: #fff7ed; border-color: #fb923c; color: #9a3412; }
+        button { border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px 12px; background: #fff; cursor: pointer; }
+        button:hover { background: #f8fafc; }
+        .grid { display: grid; grid-template-columns: 420px 1fr; gap: 14px; }
+        .list { max-height: 70vh; overflow: auto; }
+        .item { border-bottom: 1px solid #eef2f7; padding: 10px; cursor: pointer; }
+        .item:hover { background: #f8fafc; }
+        .item.active { background: #eaf2ff; }
+        .muted { color: #64748b; font-size: 12px; }
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { border: 1px solid #e5e7eb; padding: 6px 8px; vertical-align: top; }
+        .card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin: 10px 0; background: #fff; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="panel">
+        <div class="row">
+            <button id="startBtn">Start capture on server</button>
+            <button id="stopBtn">Stop capture</button>
+            <button id="cleanBtn">Clean stored files</button>
+            <span id="statusPill" class="pill status-off">stopped</span>
+            <span class="muted" id="countText">events: 0</span>
+            <span class="muted mono" id="storagePath"></span>
+        </div>
+        <div class="muted" style="margin-top: 8px;">
+            Capture state is stored in backend memory; saved files remain on server until you click clean.
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="panel">
+            <div style="font-weight: 600; margin-bottom: 8px;">Saved events</div>
+            <div id="eventList" class="list"></div>
+        </div>
+
+        <div class="panel">
+            <div id="details" class="muted">Select event from the left.</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const statusPill = document.getElementById('statusPill');
+    const countText = document.getElementById('countText');
+    const storagePath = document.getElementById('storagePath');
+    const eventList = document.getElementById('eventList');
+    const details = document.getElementById('details');
+
+    let currentEventId = null;
+
+    function esc(s) {
+        return (s ?? '').toString()
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;');
+    }
+
+    function formatTs(ts) {
+        try { return new Date(ts).toLocaleString(); } catch { return ts; }
+    }
+
+    async function api(url, options = {}) {
+        const res = await fetch(url, options);
+        if (!res.ok) {
+            throw new Error(`${url} -> ${res.status}`);
+        }
+        return res.json();
+    }
+
+    async function refreshStatus() {
+        const st = await api('/capture/api/status');
+        statusPill.textContent = st.enabled ? 'running' : 'stopped';
+        statusPill.className = `pill ${st.enabled ? 'status-on' : 'status-off'}`;
+        countText.textContent = `events: ${st.eventCount}`;
+        storagePath.textContent = st.storageRoot;
+    }
+
+    function renderEventItem(ev) {
+        const div = document.createElement('div');
+        div.className = 'item';
+        div.dataset.id = ev.id;
+        div.innerHTML = `
+            <div style="font-weight: 600;">${esc(formatTs(ev.timestamp))}</div>
+            <div class="muted">${esc(ev.remoteAddr)} | ${esc(ev.method)} ${esc(ev.path)}</div>
+            <div class="muted">ct=${esc(ev.contentType || '')} | parts=${esc(ev.partsCount)}</div>
+        `;
+
+        div.onclick = async () => {
+            currentEventId = ev.id;
+            [...eventList.querySelectorAll('.item')].forEach(x => x.classList.remove('active'));
+            div.classList.add('active');
+            await loadEventDetails(ev.id);
+        };
+        return div;
+    }
+
+    async function refreshEvents() {
+        const events = await api('/capture/api/events');
+        eventList.innerHTML = '';
+        for (const ev of events) {
+            eventList.appendChild(renderEventItem(ev));
+        }
+
+        if (events.length === 0) {
+            details.innerHTML = `<div class="muted">No events yet.</div>`;
+            currentEventId = null;
+            return;
+        }
+
+        if (!currentEventId || !events.find(x => x.id === currentEventId)) {
+            currentEventId = events[0].id;
+            const first = eventList.querySelector(`.item[data-id="${CSS.escape(currentEventId)}"]`);
+            if (first) first.classList.add('active');
+            await loadEventDetails(currentEventId);
+        }
+    }
+
+    function headerTable(headers) {
+        const rows = Object.entries(headers || {})
+            .map(([k, v]) => `<tr><td style="width: 220px;"><b>${esc(k)}</b></td><td class="mono">${esc(Array.isArray(v) ? v.join(', ') : v)}</td></tr>`)
+            .join('');
+        return `<table>${rows}</table>`;
+    }
+
+    function renderParts(ev) {
+        const parts = ev.parts || [];
+        if (!parts.length) return `<div class="muted">No parts</div>`;
+
+        return parts.map((p) => `
+            <div class="card">
+                <div class="row">
+                    <span class="pill">${esc(p.name || 'part')}</span>
+                    <span class="pill">${esc(p.contentType || 'application/octet-stream')}</span>
+                    <span class="pill">size=${esc(p.size)}</span>
+                    <a href="/capture/files/${encodeURIComponent(ev.id)}/${encodeURIComponent(p.savedFile)}">Download</a>
+                </div>
+                ${p.filename ? `<div class="muted">camera file: ${esc(p.filename)}</div>` : ''}
+                ${p.textPreview ? `<div class="mono" style="margin-top:6px;">${esc(p.textPreview)}</div>` : ''}
+            </div>
+        `).join('');
+    }
+
+    async function loadEventDetails(id) {
+        const ev = await api(`/capture/api/events/${encodeURIComponent(id)}`);
+        details.innerHTML = `
+            <div style="font-weight:700; font-size:18px;">Event ${esc(ev.id)}</div>
+            <div class="row" style="margin: 8px 0 14px;">
+                <span class="pill">${esc(formatTs(ev.timestamp))}</span>
+                <span class="pill">${esc(ev.remoteAddr || '')}</span>
+                <span class="pill">${esc(ev.method || '')} ${esc(ev.path || '')}</span>
+                <span class="pill">ct=${esc(ev.contentType || '')}</span>
+            </div>
+            <h3 style="margin: 14px 0 8px;">Headers</h3>
+            ${headerTable(ev.headers)}
+            <h3 style="margin: 14px 0 8px;">Saved files</h3>
+            ${renderParts(ev)}
+        `;
+    }
+
+    document.getElementById('startBtn').onclick = async () => {
+        await api('/capture/start', { method: 'POST' });
+        await refreshStatus();
+    };
+
+    document.getElementById('stopBtn').onclick = async () => {
+        await api('/capture/stop', { method: 'POST' });
+        await refreshStatus();
+    };
+
+    document.getElementById('cleanBtn').onclick = async () => {
+        await api('/capture/clean', { method: 'POST' });
+        await refreshStatus();
+        await refreshEvents();
+    };
+
+    async function boot() {
+        await refreshStatus();
+        await refreshEvents();
+    }
+
+    setInterval(async () => {
+        await refreshStatus();
+        await refreshEvents();
+    }, 5000);
+
+    boot();
+</script>
+</body>
+</html>

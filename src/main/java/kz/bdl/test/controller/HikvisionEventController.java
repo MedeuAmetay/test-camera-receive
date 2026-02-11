@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.Part;
 import kz.bdl.test.model.LiveEventDto;
 import kz.bdl.test.service.LiveEventHub;
+import kz.bdl.test.service.ServerCaptureService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -23,6 +24,7 @@ import java.util.Base64;
 public class HikvisionEventController {
 
     private final LiveEventHub hub;
+    private final ServerCaptureService serverCaptureService;
 
     @PostMapping("/hikvision/events")
     public ResponseEntity<String> receiveEvent(
@@ -92,6 +94,7 @@ public class HikvisionEventController {
                 .build();
 
         hub.publish(dto);
+        serverCaptureService.captureIfEnabled(dto);
 
         log.info("Hikvision event: ct={}, parts={}, from={}",
                 contentType, partsOut.size(), request.getRemoteAddr());

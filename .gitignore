@@ -35,3 +35,7 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# Runtime capture data
+capture-store/
+.tmp-test/
