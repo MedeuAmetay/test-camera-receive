@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Hikvision Live Monitor</title>
+    <style>
+        body { font-family: system-ui, Arial; margin:0; }
+        .wrap { display:grid; grid-template-columns: 380px 1fr; height:100vh; }
+        .left { border-right:1px solid #ddd; overflow:auto; }
+        .right { overflow:auto; padding:16px; }
+        .top { padding:12px; border-bottom:1px solid #ddd; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+        button { padding:8px 10px; border:1px solid #ccc; background:#fff; border-radius:10px; cursor:pointer; }
+        button:hover { background:#f6f6f6; }
+        .pill { display:inline-block; padding:2px 8px; border:1px solid #ddd; border-radius:999px; font-size:12px; }
+        .item { padding:10px 12px; border-bottom:1px solid #eee; cursor:pointer; }
+        .item:hover { background:#f7f7f7; }
+        .muted { color:#666; font-size:12px; }
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; white-space:pre-wrap; word-break:break-word; }
+        table { width:100%; border-collapse:collapse; }
+        td, th { border:1px solid #eee; padding:6px 8px; vertical-align:top; }
+        .card { border:1px solid #eee; border-radius:12px; padding:10px; margin:10px 0; }
+        .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="left">
+        <div class="top">
+            <button id="toggleBtn">Start capture</button>
+            <button id="clearBtn">Clear browser storage</button>
+            <span class="pill" id="status">stopped</span>
+            <span class="muted">Сохраняется только у тебя в браузере</span>
+        </div>
+        <div id="list"></div>
+    </div>
+
+    <div class="right">
+        <div id="details" class="muted">Выбери событие слева.</div>
+    </div>
+</div>
+
+<script>
+    // ---------------- IndexedDB ----------------
+    const DB_NAME = 'hikvision_live_db';
+    const DB_VER = 1;
+    const STORE = 'events';
+
+    function openDb() {
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME, DB_VER);
+            req.onupgradeneeded = () => {
+                const db = req.result;
+                if (!db.objectStoreNames.contains(STORE)) {
+                    db.createObjectStore(STORE, { keyPath: 'id' });
+                }
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function dbPutEvent(ev) {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE, 'readwrite');
+            tx.objectStore(STORE).put(ev);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+
+    async function dbGetAllEvents() {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE, 'readonly');
+            const store = tx.objectStore(STORE);
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function dbGetEvent(id) {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE, 'readonly');
+            const req = tx.objectStore(STORE).get(id);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function dbClear() {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE, 'readwrite');
+            tx.objectStore(STORE).clear();
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+
+    // ---------------- UI helpers ----------------
+    const listEl = document.getElementById('list');
+    const detailsEl = document.getElementById('details');
+    const statusEl = document.getElementById('status');
+    const toggleBtn = document.getElementById('toggleBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    let es = null;
+    let selectedId = null;
+
+    function esc(s) {
+        return (s ?? '').toString()
+            .replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+    }
+
+    function formatTs(ts) {
+        try { return new Date(ts).toLocaleString(); } catch { return ts; }
+    }
+
+    function renderItem(ev) {
+        const div = document.createElement('div');
+        div.className = 'item';
+        div.dataset.id = ev.id;
+
+        const parts = (ev.parts || []).length;
+        div.innerHTML = `
+      <div style="font-weight:600;">${esc(formatTs(ev.timestamp))}</div>
+      <div class="muted">${esc(ev.remoteAddr)} • ${esc(ev.method)} ${esc(ev.path)}</div>
+      <div class="muted">ct=${esc(ev.contentType || '')} • parts=${parts}</div>
+    `;
+
+        div.onclick = async () => {
+            selectedId = ev.id;
+            const full = await dbGetEvent(ev.id);
+            renderDetails(full);
+            [...listEl.querySelectorAll('.item')].forEach(x => x.style.background = '');
+            div.style.background = '#eef6ff';
+        };
+
+        return div;
+    }
+
+    function kvTable(obj) {
+        const rows = [];
+        for (const [k, v] of Object.entries(obj || {})) {
+            rows.push(`<tr><td style="width:220px"><b>${esc(k)}</b></td><td class="mono">${esc(Array.isArray(v) ? v.join(', ') : v)}</td></tr>`);
+        }
+        return `<table>${rows.join('')}</table>`;
+    }
+
+    function base64ToBlob(b64, contentType) {
+        const byteChars = atob(b64);
+        const byteNums = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+        const byteArray = new Uint8Array(byteNums);
+        return new Blob([byteArray], { type: contentType || 'application/octet-stream' });
+    }
+
+    async function downloadPart(eventId, idx) {
+        const ev = await dbGetEvent(eventId);
+        if (!ev || !ev.parts || !ev.parts[idx]) return;
+
+        const p = ev.parts[idx];
+        const filename = p.filename || (p.name ? `${p.name}` : 'part') || 'part';
+        const safeName = filename.includes('.') ? filename : (p.contentType?.includes('jpeg') ? `${filename}.jpg` : filename);
+
+        const blob = base64ToBlob(p.base64, p.contentType);
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = safeName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+
+    function renderParts(ev) {
+        const parts = ev.parts || [];
+        if (!parts.length) return `<div class="muted">No parts</div>`;
+
+        return parts.map((p, idx) => {
+            const text = p.textPreview
+                ? `<div><div class="muted">TEXT</div><div class="mono">${esc(p.textPreview)}</div></div>`
+                : '';
+
+            return `
+        <div class="card">
+          <div class="row">
+            <span class="pill">${esc(p.name)}</span>
+            ${p.filename ? `<span class="pill">fn=${esc(p.filename)}</span>` : ''}
+            <span class="pill">${esc(p.contentType || 'octet-stream')}</span>
+            <span class="pill">size=${esc(p.size)}</span>
+            <button onclick="downloadPart('${esc(ev.id)}', ${idx})">Download</button>
+          </div>
+          ${text}
+          ${!text ? `<div class="muted">base64 stored (download available)</div>` : ''}
+        </div>
+      `;
+        }).join('');
+    }
+
+    function renderDetails(ev) {
+        if (!ev) {
+            detailsEl.innerHTML = `<div class="muted">Not found</div>`;
+            return;
+        }
+
+        detailsEl.innerHTML = `
+      <div style="font-weight:700; font-size:18px;">Event</div>
+      <div class="row" style="margin:8px 0 14px;">
+        <span class="pill">${esc(formatTs(ev.timestamp))}</span>
+        <span class="pill">${esc(ev.remoteAddr)}</span>
+        <span class="pill">${esc(ev.method)} ${esc(ev.path)}</span>
+        <span class="pill">ct=${esc(ev.contentType || '')}</span>
+      </div>
+
+      <h3 style="margin:14px 0 8px;">Headers</h3>
+      ${kvTable(ev.headers || {})}
+
+      <h3 style="margin:14px 0 8px;">Parts</h3>
+      ${renderParts(ev)}
+    `;
+    }
+
+    async function reloadListFromDb() {
+        const all = await dbGetAllEvents();
+        // сортировка newest-first
+        all.sort((a, b) => (new Date(b.timestamp) - new Date(a.timestamp)));
+
+        listEl.innerHTML = '';
+        for (const ev of all) {
+            const item = renderItem(ev);
+            listEl.appendChild(item);
+        }
+
+        if (all.length && !selectedId) {
+            selectedId = all[0].id;
+            const first = await dbGetEvent(selectedId);
+            renderDetails(first);
+            const firstEl = listEl.querySelector(`.item[data-id="${selectedId}"]`);
+            if (firstEl) firstEl.style.background = '#eef6ff';
+        }
+    }
+
+    // делаем downloadPart доступным из inline onclick
+    window.downloadPart = downloadPart;
+
+    // ---------------- Capture toggle ----------------
+    function startCapture() {
+        if (es) return;
+
+        statusEl.textContent = 'connecting…';
+        toggleBtn.textContent = 'Stop capture';
+
+        es = new EventSource('/ui/stream');
+
+        es.addEventListener('open', () => {
+            statusEl.textContent = 'running';
+        });
+
+        es.addEventListener('error', () => {
+            statusEl.textContent = 'disconnected';
+        });
+
+        es.addEventListener('event', async (e) => {
+            const ev = JSON.parse(e.data);
+
+            // сохраняем ТОЛЬКО в браузере
+            await dbPutEvent(ev);
+
+            // обновляем список (быстро: просто prepend)
+            const item = renderItem(ev);
+            listEl.prepend(item);
+
+            if (!selectedId) {
+                selectedId = ev.id;
+                item.style.background = '#eef6ff';
+                renderDetails(ev);
+            }
+        });
+    }
+
+    function stopCapture() {
+        if (!es) return;
+        es.close();
+        es = null;
+        statusEl.textContent = 'stopped';
+        toggleBtn.textContent = 'Start capture';
+    }
+
+    toggleBtn.onclick = () => {
+        if (es) stopCapture();
+        else startCapture();
+    };
+
+    clearBtn.onclick = async () => {
+        await dbClear();
+        selectedId = null;
+        detailsEl.innerHTML = `<div class="muted">Storage cleared.</div>`;
+        await reloadListFromDb();
+    };
+
+    // Initial load (показать уже сохранённые в браузере)
+    reloadListFromDb();
+</script>
+</body>
+</html>
