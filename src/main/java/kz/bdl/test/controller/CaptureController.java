@@ -10,6 +10,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.nio.charset.StandardCharsets;
@@ -28,7 +29,8 @@ public class CaptureController {
 
     @PostMapping("/capture/start")
     @ResponseBody
-    public Map<String, Object> startCapture() {
+    public Map<String, Object> startCapture(@RequestParam(defaultValue = "false") boolean violationsOnly) {
+        serverCaptureService.setCaptureViolationsOnly(violationsOnly);
         serverCaptureService.setEnabled(true);
         return statusPayload();
     }
@@ -57,6 +59,12 @@ public class CaptureController {
     @ResponseBody
     public Object events() {
         return serverCaptureService.listEvents();
+    }
+
+    @GetMapping("/capture/api/illegal-types")
+    @ResponseBody
+    public Object illegalTypes() {
+        return serverCaptureService.listUniqueIllegalTypes();
     }
 
     @GetMapping("/capture/api/events/{eventId}")
@@ -91,6 +99,7 @@ public class CaptureController {
     private Map<String, Object> statusPayload() {
         return Map.of(
                 "enabled", serverCaptureService.isEnabled(),
+                "violationsOnly", serverCaptureService.isCaptureViolationsOnly(),
                 "eventCount", serverCaptureService.eventCount(),
                 "storageRoot", serverCaptureService.storageRootPath()
         );

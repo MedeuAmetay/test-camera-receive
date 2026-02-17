@@ -17,8 +17,12 @@
         .grid { display: grid; grid-template-columns: 420px 1fr; gap: 14px; }
         .list { max-height: 70vh; overflow: auto; }
         .item { border-bottom: 1px solid #eef2f7; padding: 10px; cursor: pointer; }
-        .item:hover { background: #f8fafc; }
-        .item.active { background: #eaf2ff; }
+        .item:not(.anpr-ok):not(.anpr-bad):hover { background: #f8fafc; }
+        .item.active { outline: 2px solid #93c5fd; outline-offset: -2px; }
+        .item.anpr-ok { background: #ecfdf5; }
+        .item.anpr-bad { background: #fee2e2; }
+        .item.anpr-ok:hover { background: #dcfce7; }
+        .item.anpr-bad:hover { background: #fecaca; }
         .muted { color: #64748b; font-size: 12px; }
         .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
         table { width: 100%; border-collapse: collapse; }
@@ -31,15 +35,22 @@
     <div class="panel">
         <div class="row">
             <button id="startBtn">Start capture on server</button>
+            <button id="startViolationsBtn">Start capture: violations only</button>
             <button id="stopBtn">Stop capture</button>
             <button id="cleanBtn">Clean stored files</button>
             <span id="statusPill" class="pill status-off">stopped</span>
+            <span class="muted" id="modeText">mode: all events</span>
             <span class="muted" id="countText">events: 0</span>
             <span class="muted mono" id="storagePath"></span>
         </div>
         <div class="muted" style="margin-top: 8px;">
             Capture state is stored in backend memory; saved files remain on server until you click clean.
         </div>
+    </div>
+
+    <div class="panel">
+        <div style="font-weight: 600; margin-bottom: 8px;">Unique illegal types during capture</div>
+        <div id="illegalTypes" class="muted">No illegalCode/illegalName found yet.</div>
     </div>
 
     <div class="grid">
@@ -56,8 +67,10 @@
 
 <script>
     const statusPill = document.getElementById('statusPill');
+    const modeText = document.getElementById('modeText');
     const countText = document.getElementById('countText');
     const storagePath = document.getElementById('storagePath');
+    const illegalTypes = document.getElementById('illegalTypes');
     const eventList = document.getElementById('eventList');
     const details = document.getElementById('details');
 
@@ -87,6 +100,7 @@
         const st = await api('/capture/api/status');
         statusPill.textContent = st.enabled ? 'running' : 'stopped';
         statusPill.className = `pill ${st.enabled ? 'status-on' : 'status-off'}`;
+        modeText.textContent = st.violationsOnly ? 'mode: violations only' : 'mode: all events';
         countText.textContent = `events: ${st.eventCount}`;
         storagePath.textContent = st.storageRoot;
     }
@@ -95,6 +109,11 @@
         const div = document.createElement('div');
         div.className = 'item';
         div.dataset.id = ev.id;
+        if (ev.anprStatus === 'ok') {
+            div.classList.add('anpr-ok');
+        } else if (ev.anprStatus === 'bad') {
+            div.classList.add('anpr-bad');
+        }
         div.innerHTML = `
             <div style="font-weight: 600;">${esc(formatTs(ev.timestamp))}</div>
             <div class="muted">${esc(ev.remoteAddr)} | ${esc(ev.method)} ${esc(ev.path)}</div>
@@ -129,6 +148,39 @@
             if (first) first.classList.add('active');
             await loadEventDetails(currentEventId);
         }
+    }
+
+    function renderIllegalTypes(items) {
+        if (!items.length) {
+            illegalTypes.innerHTML = `<div class="muted">No illegalCode/illegalName found yet.</div>`;
+            return;
+        }
+        const rows = items
+            .map(x => `
+                <tr>
+                    <td class="mono">${esc(x.illegalCode ?? '-')}</td>
+                    <td class="mono">${esc(x.illegalName ?? '-')}</td>
+                    <td>${esc(x.eventsCount ?? 0)}</td>
+                </tr>
+            `)
+            .join('');
+        illegalTypes.innerHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 180px;">illegalCode</th>
+                        <th>illegalName</th>
+                        <th style="width: 140px;">events</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        `;
+    }
+
+    async function refreshIllegalTypes() {
+        const types = await api('/capture/api/illegal-types');
+        renderIllegalTypes(Array.isArray(types) ? types : []);
     }
 
     function headerTable(headers) {
@@ -174,7 +226,12 @@
     }
 
     document.getElementById('startBtn').onclick = async () => {
-        await api('/capture/start', { method: 'POST' });
+        await api('/capture/start?violationsOnly=false', { method: 'POST' });
+        await refreshStatus();
+    };
+
+    document.getElementById('startViolationsBtn').onclick = async () => {
+        await api('/capture/start?violationsOnly=true', { method: 'POST' });
         await refreshStatus();
     };
 
@@ -187,16 +244,19 @@
         await api('/capture/clean', { method: 'POST' });
         await refreshStatus();
         await refreshEvents();
+        await refreshIllegalTypes();
     };
 
     async function boot() {
         await refreshStatus();
         await refreshEvents();
+        await refreshIllegalTypes();
     }
 
     setInterval(async () => {
         await refreshStatus();
         await refreshEvents();
+        await refreshIllegalTypes();
     }, 5000);
 
     boot();
