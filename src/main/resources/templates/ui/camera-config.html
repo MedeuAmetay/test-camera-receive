@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Camera Notification Setup</title>
+    <th:block th:replace="~{ui/fragments/header :: styles}"></th:block>
+    <style>
+        body { font-family: system-ui, Arial, sans-serif; margin: 0; background: #f5f7fb; color: #111; }
+        .wrap { max-width: 1300px; margin: 0 auto; padding: 20px; }
+        .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+        .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .grid { display: grid; gap: 10px; }
+        .settings-grid { grid-template-columns: 1.2fr 1fr; }
+        .payload-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .results-grid { display: grid; grid-template-columns: 560px 1fr; gap: 14px; }
+        .label { font-size: 12px; color: #64748b; margin-bottom: 4px; display: block; }
+        .field { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px 10px; background: #fff; }
+        textarea.field { min-height: 140px; resize: vertical; }
+        button { border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px 12px; background: #fff; cursor: pointer; }
+        button:hover { background: #f8fafc; }
+        button.primary { background: #0f766e; color: #fff; border-color: #0f766e; }
+        button.primary:hover { background: #0d635d; }
+        button:disabled { opacity: .65; cursor: not-allowed; }
+        .muted { color: #64748b; font-size: 12px; }
+        .pill { border: 1px solid #d1d5db; border-radius: 999px; padding: 4px 10px; font-size: 12px; display: inline-block; }
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+        .xml-preview { margin: 0; max-height: 240px; overflow: auto; background: #0b1220; color: #dbeafe; border-radius: 10px; padding: 10px; border: 1px solid #1e293b; }
+        .list-wrap { max-height: 60vh; overflow: auto; border: 1px solid #e5e7eb; border-radius: 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { border-bottom: 1px solid #eef2f7; padding: 8px; vertical-align: top; text-align: left; font-size: 13px; }
+        th { position: sticky; top: 0; background: #f8fafc; z-index: 2; }
+        .result-row { cursor: pointer; }
+        .result-row:hover { background: #f8fafc; }
+        .result-row.success { background: #ecfdf5; }
+        .result-row.fail { background: #fef2f2; }
+        .result-row.active { outline: 2px solid #93c5fd; outline-offset: -2px; }
+        .status-success { color: #065f46; }
+        .status-fail { color: #991b1b; }
+        .detail-block { margin-bottom: 12px; }
+        .detail-title { font-weight: 600; margin-bottom: 6px; }
+
+        @media (max-width: 1120px) {
+            .payload-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .results-grid { grid-template-columns: 1fr; }
+            .settings-grid { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 760px) {
+            .payload-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<th:block th:replace="~{ui/fragments/header :: header('camera')}"></th:block>
+<div class="wrap">
+    <div class="panel">
+        <div style="font-weight: 600; margin-bottom: 8px;">Массовая настройка камер (Digest Auth)</div>
+        <div class="muted">
+            Отправляет PUT на <code>/ISAPI/Event/notification/httpHosts/1</code> для списка камер.
+            Один логин/пароль используется для всех камер.
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="grid settings-grid">
+            <div>
+                <label class="label" for="cameraTargets">Камеры (IP/host, по одной в строке или через запятую)</label>
+                <textarea id="cameraTargets" class="field" placeholder="10.141.0.201&#10;10.141.0.202:80"></textarea>
+            </div>
+
+            <div class="grid">
+                <div>
+                    <label class="label" for="username">Digest login</label>
+                    <input id="username" class="field" type="text" placeholder="admin"/>
+                </div>
+                <div>
+                    <label class="label" for="password">Digest password</label>
+                    <input id="password" class="field" type="password" placeholder="password"/>
+                </div>
+                <div>
+                    <label class="label" for="endpointPath">Endpoint path</label>
+                    <input id="endpointPath" class="field" type="text" value="/ISAPI/Event/notification/httpHosts/1"/>
+                </div>
+                <div>
+                    <label class="label" for="timeoutMs">Timeout (ms)</label>
+                    <input id="timeoutMs" class="field" type="number" value="10000" min="2000" max="60000"/>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div style="font-weight: 600; margin-bottom: 10px;">Поля XML (HttpHostNotification)</div>
+        <div class="grid payload-grid">
+            <div><label class="label" for="f_id">id</label><input id="f_id" class="field" type="number" value="1"/></div>
+            <div><label class="label" for="f_url">url</label><input id="f_url" class="field" type="text" value="/events/camera/hxml"/></div>
+            <div><label class="label" for="f_protocolType">protocolType</label><input id="f_protocolType" class="field" type="text" value="HTTP"/></div>
+
+            <div><label class="label" for="f_parameterFormatType">parameterFormatType</label><input id="f_parameterFormatType" class="field" type="text" value="XML"/></div>
+            <div><label class="label" for="f_addressingFormatType">addressingFormatType</label><input id="f_addressingFormatType" class="field" type="text" value="ipaddress"/></div>
+            <div><label class="label" for="f_ipAddress">ipAddress</label><input id="f_ipAddress" class="field" type="text" value="10.141.0.104"/></div>
+
+            <div><label class="label" for="f_portNo">portNo</label><input id="f_portNo" class="field" type="number" value="8081"/></div>
+            <div><label class="label" for="f_userName">userName</label><input id="f_userName" class="field" type="text" value=""/></div>
+            <div><label class="label" for="f_httpAuthenticationMethod">httpAuthenticationMethod</label><input id="f_httpAuthenticationMethod" class="field" type="text" value="none"/></div>
+
+            <div><label class="label" for="f_detectionUpLoadPicturesType">detectionUpLoadPicturesType</label><input id="f_detectionUpLoadPicturesType" class="field" type="text" value="all"/></div>
+            <div>
+                <label class="label" for="f_videoUploadEnabled">videoUploadEnabled</label>
+                <select id="f_videoUploadEnabled" class="field">
+                    <option value="false" selected>false</option>
+                    <option value="true">true</option>
+                </select>
+            </div>
+            <div><label class="label" for="f_heartbeat">heartbeat</label><input id="f_heartbeat" class="field" type="number" value="0"/></div>
+
+            <div><label class="label" for="f_eventMode">eventMode</label><input id="f_eventMode" class="field" type="text" value="all"/></div>
+            <div>
+                <label class="label" for="f_enabled">enabled</label>
+                <select id="f_enabled" class="field">
+                    <option value="true" selected>true</option>
+                    <option value="false">false</option>
+                </select>
+            </div>
+            <div>
+                <label class="label" for="f_checkResponseEnabled">checkResponseEnabled</label>
+                <select id="f_checkResponseEnabled" class="field">
+                    <option value="true" selected>true</option>
+                    <option value="false">false</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="row">
+            <button id="sendBtn" class="primary">Отправить на камеры</button>
+            <button id="previewBtn">Обновить XML preview</button>
+            <span id="batchStatus" class="pill">готово</span>
+            <span id="batchSummary" class="muted">results: 0</span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div style="font-weight: 600; margin-bottom: 8px;">XML preview</div>
+        <pre id="xmlPreview" class="xml-preview mono"></pre>
+    </div>
+
+    <div class="panel">
+        <div class="row">
+            <input id="searchIp" class="field" type="text" placeholder="поиск по IP/host" style="max-width: 260px;"/>
+            <label class="muted" style="display:flex; align-items:center; gap:6px;">
+                <input id="failedOnly" type="checkbox"/>
+                только неуспешные
+            </label>
+            <button id="clearResultsBtn">Очистить результаты</button>
+            <span id="shownCount" class="muted">shown: 0</span>
+        </div>
+    </div>
+
+    <div class="results-grid">
+        <div class="panel">
+            <div style="font-weight: 600; margin-bottom: 8px;">Результаты запросов</div>
+            <div class="list-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th style="width: 130px;">Время</th>
+                        <th style="width: 180px;">Камера</th>
+                        <th style="width: 80px;">Status</th>
+                        <th style="width: 70px;">Auth</th>
+                        <th style="width: 70px;">ms</th>
+                        <th>Response (snippet)</th>
+                    </tr>
+                    </thead>
+                    <tbody id="resultsBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div id="details" class="muted">Выбери строку результата.</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const STORAGE_KEY = 'camera_config_results_v1';
+
+    const sendBtn = document.getElementById('sendBtn');
+    const previewBtn = document.getElementById('previewBtn');
+    const clearResultsBtn = document.getElementById('clearResultsBtn');
+
+    const batchStatus = document.getElementById('batchStatus');
+    const batchSummary = document.getElementById('batchSummary');
+    const xmlPreview = document.getElementById('xmlPreview');
+
+    const searchIp = document.getElementById('searchIp');
+    const failedOnly = document.getElementById('failedOnly');
+    const shownCount = document.getElementById('shownCount');
+    const resultsBody = document.getElementById('resultsBody');
+    const details = document.getElementById('details');
+
+    const inputs = {
+        cameraTargets: document.getElementById('cameraTargets'),
+        username: document.getElementById('username'),
+        password: document.getElementById('password'),
+        endpointPath: document.getElementById('endpointPath'),
+        timeoutMs: document.getElementById('timeoutMs'),
+        id: document.getElementById('f_id'),
+        url: document.getElementById('f_url'),
+        protocolType: document.getElementById('f_protocolType'),
+        parameterFormatType: document.getElementById('f_parameterFormatType'),
+        addressingFormatType: document.getElementById('f_addressingFormatType'),
+        ipAddress: document.getElementById('f_ipAddress'),
+        portNo: document.getElementById('f_portNo'),
+        userName: document.getElementById('f_userName'),
+        httpAuthenticationMethod: document.getElementById('f_httpAuthenticationMethod'),
+        detectionUpLoadPicturesType: document.getElementById('f_detectionUpLoadPicturesType'),
+        videoUploadEnabled: document.getElementById('f_videoUploadEnabled'),
+        heartbeat: document.getElementById('f_heartbeat'),
+        eventMode: document.getElementById('f_eventMode'),
+        enabled: document.getElementById('f_enabled'),
+        checkResponseEnabled: document.getElementById('f_checkResponseEnabled')
+    };
+
+    let results = [];
+    let selectedId = null;
+
+    function esc(s) {
+        return (s ?? '').toString()
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;');
+    }
+
+    function formatTs(ts) {
+        try {
+            return new Date(ts).toLocaleString();
+        } catch {
+            return ts;
+        }
+    }
+
+    function parseBool(v) {
+        return (v ?? '').toString().toLowerCase() === 'true';
+    }
+
+    function parseIntOr(defaultValue, value) {
+        const num = Number.parseInt((value ?? '').toString(), 10);
+        return Number.isNaN(num) ? defaultValue : num;
+    }
+
+    function parseTargets(raw) {
+        const chunks = (raw ?? '').split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
+        const uniq = [];
+        const seen = new Set();
+        for (const item of chunks) {
+            const key = item.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            uniq.push(item);
+        }
+        return uniq;
+    }
+
+    function payloadFromForm() {
+        return {
+            id: parseIntOr(1, inputs.id.value),
+            url: inputs.url.value,
+            protocolType: inputs.protocolType.value,
+            parameterFormatType: inputs.parameterFormatType.value,
+            addressingFormatType: inputs.addressingFormatType.value,
+            ipAddress: inputs.ipAddress.value,
+            portNo: parseIntOr(8081, inputs.portNo.value),
+            userName: inputs.userName.value,
+            httpAuthenticationMethod: inputs.httpAuthenticationMethod.value,
+            detectionUpLoadPicturesType: inputs.detectionUpLoadPicturesType.value,
+            videoUploadEnabled: parseBool(inputs.videoUploadEnabled.value),
+            heartbeat: parseIntOr(0, inputs.heartbeat.value),
+            eventMode: inputs.eventMode.value,
+            enabled: parseBool(inputs.enabled.value),
+            checkResponseEnabled: parseBool(inputs.checkResponseEnabled.value)
+        };
+    }
+
+    function xmlEscape(v) {
+        return (v ?? '').toString()
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&apos;');
+    }
+
+    function buildXml(payload) {
+        return `<?xml version="1.0" encoding="UTF-8"?>
+<HttpHostNotification version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
+    <id>${xmlEscape(payload.id)}</id>
+    <url>${xmlEscape(payload.url)}</url>
+    <protocolType>${xmlEscape(payload.protocolType)}</protocolType>
+    <parameterFormatType>${xmlEscape(payload.parameterFormatType)}</parameterFormatType>
+    <addressingFormatType>${xmlEscape(payload.addressingFormatType)}</addressingFormatType>
+    <ipAddress>${xmlEscape(payload.ipAddress)}</ipAddress>
+    <portNo>${xmlEscape(payload.portNo)}</portNo>
+    <userName>${xmlEscape(payload.userName)}</userName>
+    <httpAuthenticationMethod>${xmlEscape(payload.httpAuthenticationMethod)}</httpAuthenticationMethod>
+    <ANPR>
+        <detectionUpLoadPicturesType>${xmlEscape(payload.detectionUpLoadPicturesType)}</detectionUpLoadPicturesType>
+        <videoUploadEnabled>${xmlEscape(payload.videoUploadEnabled)}</videoUploadEnabled>
+    </ANPR>
+    <SubscribeEvent>
+        <heartbeat>${xmlEscape(payload.heartbeat)}</heartbeat>
+        <eventMode>${xmlEscape(payload.eventMode)}</eventMode>
+    </SubscribeEvent>
+    <enabled>${xmlEscape(payload.enabled)}</enabled>
+    <checkResponseEnabled>${xmlEscape(payload.checkResponseEnabled)}</checkResponseEnabled>
+</HttpHostNotification>`;
+    }
+
+    function refreshXmlPreview() {
+        xmlPreview.textContent = buildXml(payloadFromForm());
+    }
+
+    function loadResults() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            const parsed = raw ? JSON.parse(raw) : [];
+            results = Array.isArray(parsed) ? parsed : [];
+        } catch {
+            results = [];
+        }
+    }
+
+    function saveResults() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(results));
+    }
+
+    function filteredResults() {
+        const query = (searchIp.value || '').trim().toLowerCase();
+        return results.filter((item) => {
+            if (failedOnly.checked && item.success) return false;
+            if (!query) return true;
+            const camera = (item.cameraTarget || '').toLowerCase();
+            const url = (item.requestUrl || '').toLowerCase();
+            return camera.includes(query) || url.includes(query);
+        });
+    }
+
+    function renderDetails(item) {
+        if (!item) {
+            details.innerHTML = '<div class="muted">Выбери строку результата.</div>';
+            return;
+        }
+
+        details.innerHTML = `
+            <div class="detail-block">
+                <div class="detail-title">Камера</div>
+                <div class="mono">${esc(item.cameraTarget || '-')}</div>
+            </div>
+            <div class="detail-block">
+                <div class="detail-title">Request URL</div>
+                <div class="mono">${esc(item.requestUrl || '-')}</div>
+            </div>
+            <div class="detail-block">
+                <div class="detail-title">Status</div>
+                <div class="${item.success ? 'status-success' : 'status-fail'}">
+                    ${item.success ? 'SUCCESS' : 'FAIL'} ${esc(item.statusCode ?? '-')} (${esc(item.authType || 'none')})
+                </div>
+            </div>
+            <div class="detail-block">
+                <div class="detail-title">Error</div>
+                <div class="mono">${esc(item.error || '-')}</div>
+            </div>
+            <div class="detail-block">
+                <div class="detail-title">Response body</div>
+                <pre class="mono">${esc(item.responseBody || '')}</pre>
+            </div>
+        `;
+    }
+
+    function renderResults() {
+        const rows = filteredResults()
+            .sort((a, b) => (new Date(b.savedAt) - new Date(a.savedAt)));
+
+        shownCount.textContent = `shown: ${rows.length}`;
+        batchSummary.textContent = `results: ${results.length}`;
+
+        resultsBody.innerHTML = '';
+        for (const row of rows) {
+            const tr = document.createElement('tr');
+            tr.className = `result-row ${row.success ? 'success' : 'fail'}${selectedId === row.id ? ' active' : ''}`;
+            tr.innerHTML = `
+                <td>${esc(formatTs(row.savedAt))}</td>
+                <td class="mono">${esc(row.cameraTarget || '-')}</td>
+                <td class="${row.success ? 'status-success' : 'status-fail'}">${esc(row.statusCode ?? '-')}</td>
+                <td>${esc(row.authType || 'none')}</td>
+                <td>${esc(row.durationMs ?? '-')}</td>
+                <td class="mono">${esc((row.responseBody || '').slice(0, 180))}</td>
+            `;
+            tr.onclick = () => {
+                selectedId = row.id;
+                renderResults();
+                renderDetails(row);
+            };
+            resultsBody.appendChild(tr);
+        }
+
+        if (!rows.length) {
+            selectedId = null;
+            renderDetails(null);
+            return;
+        }
+
+        const active = rows.find(x => x.id === selectedId) || rows[0];
+        selectedId = active.id;
+        renderDetails(active);
+    }
+
+    function appendBatchResponse(data) {
+        const nowIso = data.executedAt || new Date().toISOString();
+        const list = Array.isArray(data.results) ? data.results : [];
+        const mapped = list.map((x, idx) => ({
+            id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
+            savedAt: nowIso,
+            cameraTarget: x.cameraTarget,
+            requestUrl: x.requestUrl,
+            success: !!x.success,
+            statusCode: x.statusCode,
+            authType: x.authType,
+            durationMs: x.durationMs,
+            responseBody: x.responseBody || '',
+            error: x.error || ''
+        }));
+
+        results = [...mapped, ...results];
+        saveResults();
+        renderResults();
+
+        const successCount = Number(data.successCount || 0);
+        const failureCount = Number(data.failureCount || 0);
+        batchSummary.textContent = `batch: ok=${successCount}, fail=${failureCount}, total=${mapped.length}`;
+        batchStatus.textContent = failureCount > 0 ? 'выполнено с ошибками' : 'выполнено';
+        batchStatus.style.background = failureCount > 0 ? '#fef2f2' : '#ecfdf5';
+        batchStatus.style.borderColor = failureCount > 0 ? '#fecaca' : '#86efac';
+        batchStatus.style.color = failureCount > 0 ? '#991b1b' : '#065f46';
+
+        if (data.payloadXml) {
+            xmlPreview.textContent = data.payloadXml;
+        }
+    }
+
+    async function runPush() {
+        const cameraTargets = parseTargets(inputs.cameraTargets.value);
+        if (!cameraTargets.length) {
+            alert('Добавь хотя бы один IP/host камеры.');
+            return;
+        }
+
+        const body = {
+            cameraTargets,
+            username: inputs.username.value,
+            password: inputs.password.value,
+            endpointPath: inputs.endpointPath.value,
+            timeoutMs: parseIntOr(10000, inputs.timeoutMs.value),
+            payload: payloadFromForm()
+        };
+
+        sendBtn.disabled = true;
+        batchStatus.textContent = 'в процессе...';
+        batchStatus.style.background = '#eef2ff';
+        batchStatus.style.borderColor = '#c7d2fe';
+        batchStatus.style.color = '#3730a3';
+
+        try {
+            const res = await fetch('/camera/config/api/push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
+            const data = await res.json();
+            appendBatchResponse(data);
+        } catch (e) {
+            batchStatus.textContent = 'ошибка';
+            batchStatus.style.background = '#fef2f2';
+            batchStatus.style.borderColor = '#fecaca';
+            batchStatus.style.color = '#991b1b';
+            batchSummary.textContent = `error: ${e?.message || e}`;
+        } finally {
+            sendBtn.disabled = false;
+        }
+    }
+
+    sendBtn.onclick = runPush;
+    previewBtn.onclick = refreshXmlPreview;
+    clearResultsBtn.onclick = () => {
+        results = [];
+        selectedId = null;
+        saveResults();
+        renderResults();
+        batchSummary.textContent = 'results: 0';
+        batchStatus.textContent = 'очищено';
+        batchStatus.style.background = '#f8fafc';
+        batchStatus.style.borderColor = '#cbd5e1';
+        batchStatus.style.color = '#334155';
+    };
+    searchIp.oninput = renderResults;
+    failedOnly.onchange = renderResults;
+
+    refreshXmlPreview();
+    loadResults();
+    renderResults();
+</script>
+</body>
+</html>
