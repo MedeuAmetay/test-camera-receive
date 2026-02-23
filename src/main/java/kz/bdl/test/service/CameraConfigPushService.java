@@ -23,6 +23,8 @@ public class CameraConfigPushService {
 
     private static final int DEFAULT_TIMEOUT_MS = 10_000;
     private static final int MAX_RESPONSE_CHARS = 120_000;
+    private static final String HTTP_HOST_NOTIFICATION_PATH = "/ISAPI/Event/notification/httpHosts/1";
+    private static final String MIXED_TARGET_PATH_BASE = "/ISAPI/Intelligent/channels/1/mixedTargetDetection";
 
     public CameraPushModels.Response pushToCameras(CameraPushModels.Request request) {
         List<String> targets = normalizeTargets(request.cameraTargets());
@@ -40,6 +42,7 @@ public class CameraConfigPushService {
                 RequestExecution execution = executePut(
                         uri,
                         payloadXml,
+                        "application/xml; charset=UTF-8",
                         blankToNull(request.username()),
                         blankToNull(request.password()),
                         timeoutMs
@@ -84,14 +87,77 @@ public class CameraConfigPushService {
         );
     }
 
+    public CameraPushModels.Response pushMixedTargetDetection(CameraPushModels.MixedTargetRequest request) {
+        List<String> targets = normalizeTargets(request.cameraTargets());
+        int timeoutMs = normalizeTimeout(request.timeoutMs());
+        CameraPushModels.MixedTargetPayload payload = normalizeMixedTargetPayload(request.payload());
+        String endpointPath = MIXED_TARGET_PATH_BASE + "?format=json";
+        String requestBody = buildMixedTargetJson(payload);
+        String contentType = "application/json; charset=UTF-8";
+
+        List<CameraPushModels.Result> results = new ArrayList<>();
+        int successCount = 0;
+        for (String target : targets) {
+            long startedAt = System.currentTimeMillis();
+            try {
+                URI uri = buildTargetUri(target, endpointPath);
+                RequestExecution execution = executePut(
+                        uri,
+                        requestBody,
+                        contentType,
+                        blankToNull(request.username()),
+                        blankToNull(request.password()),
+                        timeoutMs
+                );
+                boolean success = execution.statusCode() != null
+                        && execution.statusCode() >= 200
+                        && execution.statusCode() < 300;
+                if (success) {
+                    successCount++;
+                }
+
+                results.add(new CameraPushModels.Result(
+                        target,
+                        uri.toString(),
+                        success,
+                        execution.statusCode(),
+                        execution.authType(),
+                        System.currentTimeMillis() - startedAt,
+                        limitText(execution.responseBody(), MAX_RESPONSE_CHARS),
+                        execution.error()
+                ));
+            } catch (Exception e) {
+                results.add(new CameraPushModels.Result(
+                        target,
+                        null,
+                        false,
+                        null,
+                        "none",
+                        System.currentTimeMillis() - startedAt,
+                        "",
+                        safeMessage(e)
+                ));
+            }
+        }
+
+        return new CameraPushModels.Response(
+                OffsetDateTime.now(),
+                requestBody,
+                successCount,
+                Math.max(results.size() - successCount, 0),
+                results
+        );
+    }
+
     private RequestExecution executePut(
             URI uri,
-            String bodyXml,
+            String body,
+            String contentType,
             String username,
             String password,
             int timeoutMs
     ) throws Exception {
-        RawResponse first = rawPut(uri, bodyXml, null, timeoutMs);
+        RawResponse first = rawPut(uri, body, contentType, null, timeoutMs);
         String digestChallenge = extractDigestChallenge(first.headers());
         if (first.statusCode() != 401 || digestChallenge == null) {
             return new RequestExecution(first.statusCode(), first.body(), null, "none");
@@ -114,42 +180,48 @@ public class CameraConfigPushService {
                 password
         );
 
-        RawResponse second = rawPut(uri, bodyXml, authorization, timeoutMs);
+        RawResponse second = rawPut(uri, body, contentType, authorization, timeoutMs);
         return new RequestExecution(second.statusCode(), second.body(), null, "digest");
     }
 
-    private RawResponse rawPut(URI uri, String bodyXml, String authorization, int timeoutMs) throws Exception {
+    private RawResponse rawPut(
+            URI uri,
+            String body,
+            String contentType,
+            String authorization,
+            int timeoutMs
+    ) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) uri.toURL().openConnection();
         connection.setRequestMethod("PUT");
         connection.setConnectTimeout(timeoutMs);
         connection.setReadTimeout(timeoutMs);
         connection.setDoOutput(true);
-        connection.setRequestProperty("Content-Type", "application/xml; charset=UTF-8");
+        connection.setRequestProperty("Content-Type", contentType);
         connection.setRequestProperty("Accept", "*/*");
         if (authorization != null) {
             connection.setRequestProperty("Authorization", authorization);
         }
 
-        byte[] bodyBytes = bodyXml.getBytes(StandardCharsets.UTF_8);
+        byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
         connection.setFixedLengthStreamingMode(bodyBytes.length);
         try (OutputStream os = connection.getOutputStream()) {
             os.write(bodyBytes);
         }
 
         int statusCode = connection.getResponseCode();
-        String body;
+        String  responseBody;
         InputStream in = statusCode >= 400 ? connection.getErrorStream() : connection.getInputStream();
         if (in == null) {
-            body = "";
+            responseBody = "";
         } else {
             try (InputStream is = in) {
-                body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                responseBody = new String(is.readAllBytes(), StandardCharsets.UTF_8);
             }
         }
 
         Map<String, List<String>> headers = connection.getHeaderFields();
         connection.disconnect();
-        return new RawResponse(statusCode, body, headers == null ? Map.of() : headers);
+        return new RawResponse(statusCode, responseBody, headers == null ? Map.of() : headers);
     }
 
     private static String extractDigestChallenge(Map<String, List<String>> headers) {
@@ -359,7 +431,7 @@ public class CameraConfigPushService {
 
     private static String normalizeEndpointPath(String endpointPath) {
         String normalized = endpointPath == null || endpointPath.isBlank()
-                ? "/ISAPI/Event/notification/httpHosts/1"
+                ? HTTP_HOST_NOTIFICATION_PATH
                 : endpointPath.trim();
         if (!normalized.startsWith("/")) {
             normalized = "/" + normalized;
@@ -397,6 +469,21 @@ public class CameraConfigPushService {
         );
     }
 
+    private static CameraPushModels.MixedTargetPayload normalizeMixedTargetPayload(CameraPushModels.MixedTargetPayload payload) {
+        if (payload == null) {
+            return defaultMixedTargetPayload();
+        }
+        boolean binaryUpload = payload.isSupportBinaryPicUp() != null && payload.isSupportBinaryPicUp();
+        boolean convertToBmp = binaryUpload
+                && payload.convertBinToBmpEnabled() != null
+                && payload.convertBinToBmpEnabled();
+        return new CameraPushModels.MixedTargetPayload(
+                payload.enabled() != null && payload.enabled(),
+                binaryUpload,
+                convertToBmp
+        );
+    }
+
     private static CameraPushModels.Payload defaultPayload() {
         return new CameraPushModels.Payload(
                 1,
@@ -414,6 +501,14 @@ public class CameraConfigPushService {
                 "all",
                 true,
                 true
+        );
+    }
+
+    private static CameraPushModels.MixedTargetPayload defaultMixedTargetPayload() {
+        return new CameraPushModels.MixedTargetPayload(
+                false,
+                false,
+                false
         );
     }
 
@@ -445,6 +540,18 @@ public class CameraConfigPushService {
         appendTag(sb, "checkResponseEnabled", String.valueOf(payload.checkResponseEnabled()), 1);
         sb.append("</HttpHostNotification>\n");
         return sb.toString();
+    }
+
+    private static String buildMixedTargetJson(CameraPushModels.MixedTargetPayload payload) {
+        return "{"
+                + "\"MixedTargetDetection\":{"
+                + "\"enabled\":" + payload.enabled() + ","
+                + "\"TypesDetection\":[{\"ruleMode\":\"human\",\"enabled\":false}],"
+                + "\"MEF\":{\"enabled\":false},"
+                + "\"isSupportBinaryPicUp\":" + payload.isSupportBinaryPicUp() + ","
+                + "\"convertBinToBmpEnabled\":" + payload.convertBinToBmpEnabled()
+                + "}"
+                + "}";
     }
 
     private static void appendTag(StringBuilder sb, String tag, String value, int level) {

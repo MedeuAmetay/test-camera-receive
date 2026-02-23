@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>Camera Notification Setup</title>
+    <title>Camera ARM</title>
     <th:block th:replace="~{ui/fragments/header :: styles}"></th:block>
     <style>
         body { font-family: system-ui, Arial, sans-serif; margin: 0; background: #f5f7fb; color: #111; }
@@ -11,8 +11,8 @@
         .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-bottom: 14px; }
         .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
         .grid { display: grid; gap: 10px; }
-        .settings-grid { grid-template-columns: 1.2fr 1fr; }
-        .payload-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .settings-grid { grid-template-columns: 1.3fr 1fr; }
+        .options-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         .results-grid { display: grid; grid-template-columns: 560px 1fr; gap: 14px; }
         .label { font-size: 12px; color: #64748b; margin-bottom: 4px; display: block; }
         .field { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px 10px; background: #fff; }
@@ -21,11 +21,10 @@
         button:hover { background: #f8fafc; }
         button.primary { background: #0f766e; color: #fff; border-color: #0f766e; }
         button.primary:hover { background: #0d635d; }
-        button:disabled { opacity: .65; cursor: not-allowed; }
         .muted { color: #64748b; font-size: 12px; }
         .pill { border: 1px solid #d1d5db; border-radius: 999px; padding: 4px 10px; font-size: 12px; display: inline-block; }
         .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
-        .xml-preview { margin: 0; max-height: 240px; overflow: auto; background: #0b1220; color: #dbeafe; border-radius: 10px; padding: 10px; border: 1px solid #1e293b; }
+        .preview { margin: 0; max-height: 260px; overflow: auto; background: #0b1220; color: #dbeafe; border-radius: 10px; padding: 10px; border: 1px solid #1e293b; }
         .list-wrap { max-height: 60vh; overflow: auto; border: 1px solid #e5e7eb; border-radius: 10px; }
         table { width: 100%; border-collapse: collapse; }
         td, th { border-bottom: 1px solid #eef2f7; padding: 8px; vertical-align: top; text-align: left; font-size: 13px; }
@@ -41,24 +40,20 @@
         .detail-title { font-weight: 600; margin-bottom: 6px; }
 
         @media (max-width: 1120px) {
-            .payload-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .results-grid { grid-template-columns: 1fr; }
-            .settings-grid { grid-template-columns: 1fr; }
-        }
-
-        @media (max-width: 760px) {
-            .payload-grid { grid-template-columns: 1fr; }
+            .settings-grid, .options-grid, .results-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-<th:block th:replace="~{ui/fragments/header :: header('camera')}"></th:block>
+<th:block th:replace="~{ui/fragments/header :: header('camera-arm')}"></th:block>
 <div class="wrap">
     <div class="panel">
-        <div style="font-weight: 600; margin-bottom: 8px;">Массовая настройка камер (HttpHostNotification)</div>
+        <div style="font-weight: 600; margin-bottom: 8px;">Camera ARM: Setup upload type</div>
         <div class="muted">
-            Отправляет PUT на <code>/ISAPI/Event/notification/httpHosts/1</code> для списка камер.
-            Один логин/пароль используется для всех камер.
+            PUT на <code>/ISAPI/Intelligent/channels/1/mixedTargetDetection?format=json</code>.
+            <code>MEF</code> и <code>TypesDetection</code> фиксированы:
+            <code>{"ruleMode":"human","enabled":false}</code> и <code>{"enabled":false}</code>.
+            При <code>enabled=false</code> камера отправляет обычные XML-события.
         </div>
     </div>
 
@@ -66,9 +61,8 @@
         <div class="grid settings-grid">
             <div>
                 <label class="label" for="cameraTargets">Камеры (IP/host, по одной в строке или через запятую)</label>
-                <textarea id="cameraTargets" class="field" placeholder="10.141.0.201&#10;10.141.0.202:80"></textarea>
+                <textarea id="cameraTargets" class="field" placeholder="10.219.14.147&#10;10.219.14.148"></textarea>
             </div>
-
             <div class="grid">
                 <div>
                     <label class="label" for="username">Digest login</label>
@@ -79,10 +73,6 @@
                     <input id="password" class="field" type="password" placeholder="password"/>
                 </div>
                 <div>
-                    <label class="label" for="endpointPath">Endpoint path</label>
-                    <input id="endpointPath" class="field" type="text" value="/ISAPI/Event/notification/httpHosts/1"/>
-                </div>
-                <div>
                     <label class="label" for="timeoutMs">Timeout (ms)</label>
                     <input id="timeoutMs" class="field" type="number" value="10000" min="2000" max="60000"/>
                 </div>
@@ -91,60 +81,49 @@
     </div>
 
     <div class="panel">
-        <div style="font-weight: 600; margin-bottom: 10px;">Поля XML (HttpHostNotification)</div>
-        <div class="grid payload-grid">
-            <div><label class="label" for="f_id">id</label><input id="f_id" class="field" type="number" value="1"/></div>
-            <div><label class="label" for="f_url">url</label><input id="f_url" class="field" type="text" value="/events/camera/hxml"/></div>
-            <div><label class="label" for="f_protocolType">protocolType</label><input id="f_protocolType" class="field" type="text" value="HTTP"/></div>
-
-            <div><label class="label" for="f_parameterFormatType">parameterFormatType</label><input id="f_parameterFormatType" class="field" type="text" value="XML"/></div>
-            <div><label class="label" for="f_addressingFormatType">addressingFormatType</label><input id="f_addressingFormatType" class="field" type="text" value="ipaddress"/></div>
-            <div><label class="label" for="f_ipAddress">ipAddress</label><input id="f_ipAddress" class="field" type="text" value="10.141.0.104"/></div>
-
-            <div><label class="label" for="f_portNo">portNo</label><input id="f_portNo" class="field" type="number" value="8081"/></div>
-            <div><label class="label" for="f_userName">userName</label><input id="f_userName" class="field" type="text" value=""/></div>
-            <div><label class="label" for="f_httpAuthenticationMethod">httpAuthenticationMethod</label><input id="f_httpAuthenticationMethod" class="field" type="text" value="none"/></div>
-
-            <div><label class="label" for="f_detectionUpLoadPicturesType">detectionUpLoadPicturesType</label><input id="f_detectionUpLoadPicturesType" class="field" type="text" value="all"/></div>
+        <div class="grid options-grid">
             <div>
-                <label class="label" for="f_videoUploadEnabled">videoUploadEnabled</label>
-                <select id="f_videoUploadEnabled" class="field">
+                <label class="label" for="enabled">enabled</label>
+                <select id="enabled" class="field">
                     <option value="false" selected>false</option>
                     <option value="true">true</option>
                 </select>
             </div>
-            <div><label class="label" for="f_heartbeat">heartbeat</label><input id="f_heartbeat" class="field" type="number" value="0"/></div>
-
-            <div><label class="label" for="f_eventMode">eventMode</label><input id="f_eventMode" class="field" type="text" value="all"/></div>
             <div>
-                <label class="label" for="f_enabled">enabled</label>
-                <select id="f_enabled" class="field">
-                    <option value="true" selected>true</option>
-                    <option value="false">false</option>
+                <label class="label" for="binaryUpload">isSupportBinaryPicUp</label>
+                <select id="binaryUpload" class="field">
+                    <option value="false" selected>false</option>
+                    <option value="true">true</option>
                 </select>
             </div>
             <div>
-                <label class="label" for="f_checkResponseEnabled">checkResponseEnabled</label>
-                <select id="f_checkResponseEnabled" class="field">
-                    <option value="true" selected>true</option>
-                    <option value="false">false</option>
+                <label class="label" for="bmpEnabled">convertBinToBmpEnabled</label>
+                <select id="bmpEnabled" class="field">
+                    <option value="false" selected>false</option>
+                    <option value="true">true</option>
                 </select>
             </div>
+        </div>
+        <div class="muted" style="margin-top: 8px;">
+            `convertBinToBmpEnabled` доступен только когда `isSupportBinaryPicUp=true`.
+        </div>
+        <div class="muted" style="margin-top: 6px;">
+            <code>enabled=false</code> - License Plate Alarm (XML). <code>enabled=true</code> - Mixed Target (JSON).
         </div>
     </div>
 
     <div class="panel">
         <div class="row">
             <button id="sendBtn" class="primary">Отправить на камеры</button>
-            <button id="previewBtn">Обновить XML preview</button>
+            <button id="previewBtn">Обновить preview</button>
             <span id="batchStatus" class="pill">готово</span>
             <span id="batchSummary" class="muted">results: 0</span>
         </div>
     </div>
 
     <div class="panel">
-        <div style="font-weight: 600; margin-bottom: 8px;">XML preview</div>
-        <pre id="xmlPreview" class="xml-preview mono"></pre>
+        <div style="font-weight: 600; margin-bottom: 8px;">Request preview</div>
+        <pre id="preview" class="preview mono"></pre>
     </div>
 
     <div class="panel">
@@ -186,7 +165,7 @@
 </div>
 
 <script>
-    const STORAGE_KEY = 'camera_config_results_v1';
+    const STORAGE_KEY = 'camera_arm_results_v1';
 
     const sendBtn = document.getElementById('sendBtn');
     const previewBtn = document.getElementById('previewBtn');
@@ -194,7 +173,7 @@
 
     const batchStatus = document.getElementById('batchStatus');
     const batchSummary = document.getElementById('batchSummary');
-    const xmlPreview = document.getElementById('xmlPreview');
+    const previewEl = document.getElementById('preview');
 
     const searchIp = document.getElementById('searchIp');
     const failedOnly = document.getElementById('failedOnly');
@@ -206,23 +185,10 @@
         cameraTargets: document.getElementById('cameraTargets'),
         username: document.getElementById('username'),
         password: document.getElementById('password'),
-        endpointPath: document.getElementById('endpointPath'),
         timeoutMs: document.getElementById('timeoutMs'),
-        id: document.getElementById('f_id'),
-        url: document.getElementById('f_url'),
-        protocolType: document.getElementById('f_protocolType'),
-        parameterFormatType: document.getElementById('f_parameterFormatType'),
-        addressingFormatType: document.getElementById('f_addressingFormatType'),
-        ipAddress: document.getElementById('f_ipAddress'),
-        portNo: document.getElementById('f_portNo'),
-        userName: document.getElementById('f_userName'),
-        httpAuthenticationMethod: document.getElementById('f_httpAuthenticationMethod'),
-        detectionUpLoadPicturesType: document.getElementById('f_detectionUpLoadPicturesType'),
-        videoUploadEnabled: document.getElementById('f_videoUploadEnabled'),
-        heartbeat: document.getElementById('f_heartbeat'),
-        eventMode: document.getElementById('f_eventMode'),
-        enabled: document.getElementById('f_enabled'),
-        checkResponseEnabled: document.getElementById('f_checkResponseEnabled')
+        enabled: document.getElementById('enabled'),
+        binaryUpload: document.getElementById('binaryUpload'),
+        bmpEnabled: document.getElementById('bmpEnabled')
     };
 
     let results = [];
@@ -236,10 +202,6 @@
             .replaceAll('"', '&quot;');
     }
 
-    function formatTs(ts) {
-        try { return new Date(ts).toLocaleString(); } catch { return ts; }
-    }
-
     function parseBool(v) {
         return (v ?? '').toString().toLowerCase() === 'true';
     }
@@ -247,6 +209,14 @@
     function parseIntOr(defaultValue, value) {
         const num = Number.parseInt((value ?? '').toString(), 10);
         return Number.isNaN(num) ? defaultValue : num;
+    }
+
+    function formatTs(ts) {
+        try {
+            return new Date(ts).toLocaleString();
+        } catch {
+            return ts;
+        }
     }
 
     function parseTargets(raw) {
@@ -263,61 +233,38 @@
     }
 
     function payloadFromForm() {
+        const binaryUpload = parseBool(inputs.binaryUpload.value);
+        const bmpEnabled = binaryUpload && parseBool(inputs.bmpEnabled.value);
         return {
-            id: parseIntOr(1, inputs.id.value),
-            url: inputs.url.value,
-            protocolType: inputs.protocolType.value,
-            parameterFormatType: inputs.parameterFormatType.value,
-            addressingFormatType: inputs.addressingFormatType.value,
-            ipAddress: inputs.ipAddress.value,
-            portNo: parseIntOr(8081, inputs.portNo.value),
-            userName: inputs.userName.value,
-            httpAuthenticationMethod: inputs.httpAuthenticationMethod.value,
-            detectionUpLoadPicturesType: inputs.detectionUpLoadPicturesType.value,
-            videoUploadEnabled: parseBool(inputs.videoUploadEnabled.value),
-            heartbeat: parseIntOr(0, inputs.heartbeat.value),
-            eventMode: inputs.eventMode.value,
             enabled: parseBool(inputs.enabled.value),
-            checkResponseEnabled: parseBool(inputs.checkResponseEnabled.value)
+            isSupportBinaryPicUp: binaryUpload,
+            convertBinToBmpEnabled: bmpEnabled
         };
     }
 
-    function xmlEscape(v) {
-        return (v ?? '').toString()
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&apos;');
+    function buildPreviewJson(payload) {
+        return JSON.stringify({
+            MixedTargetDetection: {
+                enabled: payload.enabled,
+                TypesDetection: [{ ruleMode: 'human', enabled: false }],
+                MEF: { enabled: false },
+                isSupportBinaryPicUp: payload.isSupportBinaryPicUp,
+                convertBinToBmpEnabled: payload.convertBinToBmpEnabled
+            }
+        }, null, 2);
     }
 
-    function buildXml(payload) {
-        return `<?xml version="1.0" encoding="UTF-8"?>
-<HttpHostNotification version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
-    <id>${xmlEscape(payload.id)}</id>
-    <url>${xmlEscape(payload.url)}</url>
-    <protocolType>${xmlEscape(payload.protocolType)}</protocolType>
-    <parameterFormatType>${xmlEscape(payload.parameterFormatType)}</parameterFormatType>
-    <addressingFormatType>${xmlEscape(payload.addressingFormatType)}</addressingFormatType>
-    <ipAddress>${xmlEscape(payload.ipAddress)}</ipAddress>
-    <portNo>${xmlEscape(payload.portNo)}</portNo>
-    <userName>${xmlEscape(payload.userName)}</userName>
-    <httpAuthenticationMethod>${xmlEscape(payload.httpAuthenticationMethod)}</httpAuthenticationMethod>
-    <ANPR>
-        <detectionUpLoadPicturesType>${xmlEscape(payload.detectionUpLoadPicturesType)}</detectionUpLoadPicturesType>
-        <videoUploadEnabled>${xmlEscape(payload.videoUploadEnabled)}</videoUploadEnabled>
-    </ANPR>
-    <SubscribeEvent>
-        <heartbeat>${xmlEscape(payload.heartbeat)}</heartbeat>
-        <eventMode>${xmlEscape(payload.eventMode)}</eventMode>
-    </SubscribeEvent>
-    <enabled>${xmlEscape(payload.enabled)}</enabled>
-    <checkResponseEnabled>${xmlEscape(payload.checkResponseEnabled)}</checkResponseEnabled>
-</HttpHostNotification>`;
+    function refreshPreview() {
+        const payload = payloadFromForm();
+        previewEl.textContent = buildPreviewJson(payload);
     }
 
-    function refreshXmlPreview() {
-        xmlPreview.textContent = buildXml(payloadFromForm());
+    function syncBinaryControls() {
+        const binaryUpload = parseBool(inputs.binaryUpload.value);
+        inputs.bmpEnabled.disabled = !binaryUpload;
+        if (!binaryUpload) {
+            inputs.bmpEnabled.value = 'false';
+        }
     }
 
     function loadResults() {
@@ -382,9 +329,7 @@
     }
 
     function renderResults() {
-        const rows = filteredResults()
-            .sort((a, b) => (new Date(b.savedAt) - new Date(a.savedAt)));
-
+        const rows = filteredResults().sort((a, b) => (new Date(b.savedAt) - new Date(a.savedAt)));
         shownCount.textContent = `shown: ${rows.length}`;
         batchSummary.textContent = `results: ${results.length}`;
 
@@ -413,7 +358,6 @@
             renderDetails(null);
             return;
         }
-
         const active = rows.find(x => x.id === selectedId) || rows[0];
         selectedId = active.id;
         renderDetails(active);
@@ -421,8 +365,8 @@
 
     function appendBatchResponse(data) {
         const nowIso = data.executedAt || new Date().toISOString();
-        const list = Array.isArray(data.results) ? data.results : [];
         const payloadText = data.payloadXml || '';
+        const list = Array.isArray(data.results) ? data.results : [];
         const mapped = list.map((x, idx) => ({
             id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
             savedAt: nowIso,
@@ -448,9 +392,8 @@
         batchStatus.style.background = failureCount > 0 ? '#fef2f2' : '#ecfdf5';
         batchStatus.style.borderColor = failureCount > 0 ? '#fecaca' : '#86efac';
         batchStatus.style.color = failureCount > 0 ? '#991b1b' : '#065f46';
-
         if (payloadText) {
-            xmlPreview.textContent = payloadText;
+            previewEl.textContent = payloadText;
         }
     }
 
@@ -461,11 +404,11 @@
             return;
         }
 
+        syncBinaryControls();
         const body = {
             cameraTargets,
             username: inputs.username.value,
             password: inputs.password.value,
-            endpointPath: inputs.endpointPath.value,
             timeoutMs: parseIntOr(10000, inputs.timeoutMs.value),
             payload: payloadFromForm()
         };
@@ -477,7 +420,7 @@
         batchStatus.style.color = '#3730a3';
 
         try {
-            const res = await fetch('/camera/config/api/push', {
+            const res = await fetch('/camera-arm/api/push', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -499,7 +442,7 @@
     }
 
     sendBtn.onclick = runPush;
-    previewBtn.onclick = refreshXmlPreview;
+    previewBtn.onclick = () => { syncBinaryControls(); refreshPreview(); };
     clearResultsBtn.onclick = () => {
         results = [];
         selectedId = null;
@@ -513,8 +456,12 @@
     };
     searchIp.oninput = renderResults;
     failedOnly.onchange = renderResults;
+    inputs.enabled.onchange = refreshPreview;
+    inputs.binaryUpload.onchange = () => { syncBinaryControls(); refreshPreview(); };
+    inputs.bmpEnabled.onchange = refreshPreview;
 
-    refreshXmlPreview();
+    syncBinaryControls();
+    refreshPreview();
     loadResults();
     renderResults();
 </script>

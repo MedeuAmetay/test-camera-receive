@@ -20,9 +20,37 @@ public class CameraConfigController {
         return "ui/camera-config";
     }
 
+    @GetMapping("/camera-arm")
+    public String cameraArmPage() {
+        return "ui/camera-arm";
+    }
+
+    @GetMapping("/camera/mixed-target")
+    public String cameraMixedTargetPageAlias() {
+        return "ui/camera-arm";
+    }
+
     @PostMapping("/camera/config/api/push")
     @ResponseBody
     public CameraPushModels.Response pushToCameras(@RequestBody CameraPushModels.Request request) {
         return cameraConfigPushService.pushToCameras(request);
+    }
+
+    @PostMapping("/camera/config/api/push/mixed-target")
+    @ResponseBody
+    public CameraPushModels.Response pushMixedTarget(@RequestBody CameraPushModels.MixedTargetRequest request) {
+        return cameraConfigPushService.pushMixedTargetDetection(request);
+    }
+
+    @PostMapping("/camera/mixed-target/api/push")
+    @ResponseBody
+    public CameraPushModels.Response pushMixedTargetSeparate(@RequestBody CameraPushModels.MixedTargetRequest request) {
+        return cameraConfigPushService.pushMixedTargetDetection(request);
+    }
+
+    @PostMapping("/camera-arm/api/push")
+    @ResponseBody
+    public CameraPushModels.Response pushCameraArm(@RequestBody CameraPushModels.MixedTargetRequest request) {
+        return cameraConfigPushService.pushMixedTargetDetection(request);
     }
 }

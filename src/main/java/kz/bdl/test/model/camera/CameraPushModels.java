@@ -37,6 +37,22 @@ public final class CameraPushModels {
     ) {
     }
 
+    public record MixedTargetRequest(
+            List<String> cameraTargets,
+            String username,
+            String password,
+            Integer timeoutMs,
+            MixedTargetPayload payload
+    ) {
+    }
+
+    public record MixedTargetPayload(
+            Boolean enabled,
+            Boolean isSupportBinaryPicUp,
+            Boolean convertBinToBmpEnabled
+    ) {
+    }
+
     public record Result(
             String cameraTarget,
             String requestUrl,
