@@ -39,6 +39,92 @@
         .status-fail { color: #991b1b; }
         .detail-block { margin-bottom: 12px; }
         .detail-title { font-weight: 600; margin-bottom: 6px; }
+        .enabled-focus {
+            margin-top: 10px;
+            border-radius: 12px;
+            border: 2px solid transparent;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .enabled-focus.enabled-on {
+            border-color: #34d399;
+            background: linear-gradient(180deg, #ecfdf5 0%, #f0fdf4 100%);
+        }
+        .enabled-focus.enabled-off {
+            border-color: #f87171;
+            background: linear-gradient(180deg, #fef2f2 0%, #fff1f2 100%);
+        }
+        .enabled-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .enabled-state {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: .5px;
+            border-radius: 999px;
+            padding: 2px 8px;
+            border: 1px solid transparent;
+        }
+        .enabled-focus.enabled-on .enabled-state {
+            color: #065f46;
+            background: #dcfce7;
+            border-color: #86efac;
+        }
+        .enabled-focus.enabled-off .enabled-state {
+            color: #991b1b;
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+        .enabled-hint {
+            font-size: 12px;
+            color: #334155;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 54px;
+            height: 30px;
+            flex: 0 0 auto;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background: #ef4444;
+            transition: .2s;
+            border-radius: 999px;
+        }
+        .slider:before {
+            content: "";
+            position: absolute;
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            top: 4px;
+            background: #fff;
+            transition: .2s;
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+        }
+        .switch input:checked + .slider {
+            background: #10b981;
+        }
+        .switch input:checked + .slider:before {
+            transform: translateX(24px);
+        }
 
         @media (max-width: 1120px) {
             .payload-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -94,16 +180,14 @@
         <div style="font-weight: 600; margin-bottom: 10px;">Поля XML (HttpHostNotification)</div>
         <div class="grid payload-grid">
             <div><label class="label" for="f_id">id</label><input id="f_id" class="field" type="number" value="1"/></div>
-            <div><label class="label" for="f_url">url</label><input id="f_url" class="field" type="text" value="/events/camera/hxml"/></div>
+            <div><label class="label" for="f_url">url</label><input id="f_url" class="field" type="text" value="/test"/></div>
             <div><label class="label" for="f_protocolType">protocolType</label><input id="f_protocolType" class="field" type="text" value="HTTP"/></div>
 
             <div><label class="label" for="f_parameterFormatType">parameterFormatType</label><input id="f_parameterFormatType" class="field" type="text" value="XML"/></div>
             <div><label class="label" for="f_addressingFormatType">addressingFormatType</label><input id="f_addressingFormatType" class="field" type="text" value="ipaddress"/></div>
-            <div><label class="label" for="f_ipAddress">ipAddress</label><input id="f_ipAddress" class="field" type="text" value="10.141.0.104"/></div>
+            <div><label class="label" for="f_ipAddress">ipAddress</label><input id="f_ipAddress" class="field" type="text" value="10.219.14.147"/></div>
 
-            <div><label class="label" for="f_portNo">portNo</label><input id="f_portNo" class="field" type="number" value="8081"/></div>
-            <div><label class="label" for="f_userName">userName</label><input id="f_userName" class="field" type="text" value=""/></div>
-            <div><label class="label" for="f_httpAuthenticationMethod">httpAuthenticationMethod</label><input id="f_httpAuthenticationMethod" class="field" type="text" value="none"/></div>
+            <div><label class="label" for="f_portNo">portNo</label><input id="f_portNo" class="field" type="number" value="9095"/></div>
 
             <div><label class="label" for="f_detectionUpLoadPicturesType">detectionUpLoadPicturesType</label><input id="f_detectionUpLoadPicturesType" class="field" type="text" value="all"/></div>
             <div>
@@ -113,23 +197,21 @@
                     <option value="true">true</option>
                 </select>
             </div>
-            <div><label class="label" for="f_heartbeat">heartbeat</label><input id="f_heartbeat" class="field" type="number" value="0"/></div>
 
             <div><label class="label" for="f_eventMode">eventMode</label><input id="f_eventMode" class="field" type="text" value="all"/></div>
+        </div>
+        <div id="enabledCard" class="enabled-focus enabled-on">
             <div>
-                <label class="label" for="f_enabled">enabled</label>
-                <select id="f_enabled" class="field">
-                    <option value="true" selected>true</option>
-                    <option value="false">false</option>
-                </select>
+                <div class="enabled-title">Upload mode <span id="enabledState" class="enabled-state">ENABLED</span></div>
+                <div class="enabled-hint">Переключатель ISAPI отправки</div>
             </div>
-            <div>
-                <label class="label" for="f_checkResponseEnabled">checkResponseEnabled</label>
-                <select id="f_checkResponseEnabled" class="field">
-                    <option value="true" selected>true</option>
-                    <option value="false">false</option>
-                </select>
-            </div>
+            <label class="switch" for="f_enabled">
+                <input id="f_enabled" type="checkbox" checked/>
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div class="muted" style="margin-top: 8px;">
+            Фиксированные поля: <code>userName=""</code>, <code>httpAuthenticationMethod="none"</code>, <code>heartbeat=0</code>, <code>checkResponseEnabled=false</code>.
         </div>
     </div>
 
@@ -201,6 +283,8 @@
     const shownCount = document.getElementById('shownCount');
     const resultsBody = document.getElementById('resultsBody');
     const details = document.getElementById('details');
+    const enabledCard = document.getElementById('enabledCard');
+    const enabledState = document.getElementById('enabledState');
 
     const inputs = {
         cameraTargets: document.getElementById('cameraTargets'),
@@ -215,14 +299,10 @@
         addressingFormatType: document.getElementById('f_addressingFormatType'),
         ipAddress: document.getElementById('f_ipAddress'),
         portNo: document.getElementById('f_portNo'),
-        userName: document.getElementById('f_userName'),
-        httpAuthenticationMethod: document.getElementById('f_httpAuthenticationMethod'),
         detectionUpLoadPicturesType: document.getElementById('f_detectionUpLoadPicturesType'),
         videoUploadEnabled: document.getElementById('f_videoUploadEnabled'),
-        heartbeat: document.getElementById('f_heartbeat'),
         eventMode: document.getElementById('f_eventMode'),
-        enabled: document.getElementById('f_enabled'),
-        checkResponseEnabled: document.getElementById('f_checkResponseEnabled')
+        enabled: document.getElementById('f_enabled')
     };
 
     let results = [];
@@ -270,15 +350,15 @@
             parameterFormatType: inputs.parameterFormatType.value,
             addressingFormatType: inputs.addressingFormatType.value,
             ipAddress: inputs.ipAddress.value,
-            portNo: parseIntOr(8081, inputs.portNo.value),
-            userName: inputs.userName.value,
-            httpAuthenticationMethod: inputs.httpAuthenticationMethod.value,
+            portNo: parseIntOr(9095, inputs.portNo.value),
+            userName: '',
+            httpAuthenticationMethod: 'none',
             detectionUpLoadPicturesType: inputs.detectionUpLoadPicturesType.value,
             videoUploadEnabled: parseBool(inputs.videoUploadEnabled.value),
-            heartbeat: parseIntOr(0, inputs.heartbeat.value),
+            heartbeat: 0,
             eventMode: inputs.eventMode.value,
-            enabled: parseBool(inputs.enabled.value),
-            checkResponseEnabled: parseBool(inputs.checkResponseEnabled.value)
+            enabled: !!inputs.enabled.checked,
+            checkResponseEnabled: false
         };
     }
 
@@ -292,6 +372,9 @@
     }
 
     function buildXml(payload) {
+        const userNameLine = (payload.userName ?? '').toString().trim()
+            ? `<userName>${xmlEscape(payload.userName)}</userName>`
+            : `<userName/>`;
         return `<?xml version="1.0" encoding="UTF-8"?>
 <HttpHostNotification version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
     <id>${xmlEscape(payload.id)}</id>
@@ -299,9 +382,8 @@
     <protocolType>${xmlEscape(payload.protocolType)}</protocolType>
     <parameterFormatType>${xmlEscape(payload.parameterFormatType)}</parameterFormatType>
     <addressingFormatType>${xmlEscape(payload.addressingFormatType)}</addressingFormatType>
-    <ipAddress>${xmlEscape(payload.ipAddress)}</ipAddress>
     <portNo>${xmlEscape(payload.portNo)}</portNo>
-    <userName>${xmlEscape(payload.userName)}</userName>
+    ${userNameLine}
     <httpAuthenticationMethod>${xmlEscape(payload.httpAuthenticationMethod)}</httpAuthenticationMethod>
     <ANPR>
         <detectionUpLoadPicturesType>${xmlEscape(payload.detectionUpLoadPicturesType)}</detectionUpLoadPicturesType>
@@ -313,11 +395,20 @@
     </SubscribeEvent>
     <enabled>${xmlEscape(payload.enabled)}</enabled>
     <checkResponseEnabled>${xmlEscape(payload.checkResponseEnabled)}</checkResponseEnabled>
+    <ipAddress xmlns="">${xmlEscape(payload.ipAddress)}</ipAddress>
 </HttpHostNotification>`;
     }
 
     function refreshXmlPreview() {
         xmlPreview.textContent = buildXml(payloadFromForm());
+    }
+
+    function syncEnabledUi() {
+        const isEnabled = !!inputs.enabled.checked;
+        enabledCard.classList.toggle('enabled-on', isEnabled);
+        enabledCard.classList.toggle('enabled-off', !isEnabled);
+        enabledState.textContent = isEnabled ? 'ENABLED' : 'DISABLED';
+        refreshXmlPreview();
     }
 
     function loadResults() {
@@ -513,8 +604,9 @@
     };
     searchIp.oninput = renderResults;
     failedOnly.onchange = renderResults;
+    inputs.enabled.onchange = syncEnabledUi;
 
-    refreshXmlPreview();
+    syncEnabledUi();
     loadResults();
     renderResults();
 </script>

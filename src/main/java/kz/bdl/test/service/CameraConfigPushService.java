@@ -452,20 +452,20 @@ public class CameraConfigPushService {
         }
         return new CameraPushModels.Payload(
                 payload.id() == null ? 1 : payload.id(),
-                defaultIfBlank(payload.url(), "/events/camera/hxml"),
+                defaultIfBlank(payload.url(), "/test"),
                 defaultIfBlank(payload.protocolType(), "HTTP"),
                 defaultIfBlank(payload.parameterFormatType(), "XML"),
                 defaultIfBlank(payload.addressingFormatType(), "ipaddress"),
-                defaultIfBlank(payload.ipAddress(), "10.141.0.104"),
-                payload.portNo() == null ? 8081 : payload.portNo(),
-                payload.userName() == null ? "" : payload.userName(),
-                defaultIfBlank(payload.httpAuthenticationMethod(), "none"),
+                defaultIfBlank(payload.ipAddress(), "10.219.14.147"),
+                payload.portNo() == null ? 9095 : payload.portNo(),
+                "",
+                "none",
                 defaultIfBlank(payload.detectionUpLoadPicturesType(), "all"),
                 payload.videoUploadEnabled() != null && payload.videoUploadEnabled(),
-                payload.heartbeat() == null ? 0 : payload.heartbeat(),
+                0,
                 defaultIfBlank(payload.eventMode(), "all"),
                 payload.enabled() == null || payload.enabled(),
-                payload.checkResponseEnabled() == null || payload.checkResponseEnabled()
+                false
         );
     }
 
@@ -487,12 +487,12 @@ public class CameraConfigPushService {
     private static CameraPushModels.Payload defaultPayload() {
         return new CameraPushModels.Payload(
                 1,
-                "/events/camera/hxml",
+                "/test",
                 "HTTP",
                 "XML",
                 "ipaddress",
-                "10.141.0.104",
-                8081,
+                "10.219.14.147",
+                9095,
                 "",
                 "none",
                 "all",
@@ -500,7 +500,7 @@ public class CameraConfigPushService {
                 0,
                 "all",
                 true,
-                true
+                false
         );
     }
 
@@ -521,9 +521,12 @@ public class CameraConfigPushService {
         appendTag(sb, "protocolType", payload.protocolType(), 1);
         appendTag(sb, "parameterFormatType", payload.parameterFormatType(), 1);
         appendTag(sb, "addressingFormatType", payload.addressingFormatType(), 1);
-        appendTag(sb, "ipAddress", payload.ipAddress(), 1);
         appendTag(sb, "portNo", String.valueOf(payload.portNo()), 1);
-        appendTag(sb, "userName", payload.userName(), 1);
+        if (payload.userName() == null || payload.userName().isBlank()) {
+            indent(sb, 1).append("<userName/>\n");
+        } else {
+            appendTag(sb, "userName", payload.userName(), 1);
+        }
         appendTag(sb, "httpAuthenticationMethod", payload.httpAuthenticationMethod(), 1);
 
         indent(sb, 1).append("<ANPR>\n");
@@ -538,6 +541,10 @@ public class CameraConfigPushService {
 
         appendTag(sb, "enabled", String.valueOf(payload.enabled()), 1);
         appendTag(sb, "checkResponseEnabled", String.valueOf(payload.checkResponseEnabled()), 1);
+        indent(sb, 1)
+                .append("<ipAddress xmlns=\"\">")
+                .append(escapeXml(payload.ipAddress() == null ? "" : payload.ipAddress()))
+                .append("</ipAddress>\n");
         sb.append("</HttpHostNotification>\n");
         return sb.toString();
     }
