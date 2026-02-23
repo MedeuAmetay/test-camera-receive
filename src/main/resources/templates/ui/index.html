@@ -3,48 +3,263 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>Hikvision Live Monitor</title>
+    <title>UI Local Capture</title>
+    <th:block th:replace="~{ui/fragments/header :: styles}"></th:block>
     <style>
-        body { font-family: system-ui, Arial; margin:0; }
-        .wrap { display:grid; grid-template-columns: 380px 1fr; height:100vh; }
-        .left { border-right:1px solid #ddd; overflow:auto; }
-        .right { overflow:auto; padding:16px; }
-        .top { padding:12px; border-bottom:1px solid #ddd; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-        button { padding:8px 10px; border:1px solid #ccc; background:#fff; border-radius:10px; cursor:pointer; }
-        button:hover { background:#f6f6f6; }
-        .pill { display:inline-block; padding:2px 8px; border:1px solid #ddd; border-radius:999px; font-size:12px; }
-        .item { padding:10px 12px; border-bottom:1px solid #eee; cursor:pointer; }
-        .item:hover { background:#f7f7f7; }
-        .muted { color:#666; font-size:12px; }
-        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; white-space:pre-wrap; word-break:break-word; }
-        table { width:100%; border-collapse:collapse; }
-        td, th { border:1px solid #eee; padding:6px 8px; vertical-align:top; }
-        .card { border:1px solid #eee; border-radius:12px; padding:10px; margin:10px 0; }
-        .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+        body { font-family: system-ui, Arial, sans-serif; margin: 0; background: #f5f7fb; color: #111; }
+        .wrap { max-width: 1300px; margin: 0 auto; padding: 20px; }
+        .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+        .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .pill { border: 1px solid #d1d5db; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+        .status-on { background: #ecfdf5; border-color: #10b981; color: #065f46; }
+        .status-off { background: #fff7ed; border-color: #fb923c; color: #9a3412; }
+        .status-disconnected { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+        button { border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px 12px; background: #fff; cursor: pointer; }
+        button:hover { background: #f8fafc; }
+        input:not([type]),
+        input[type="text"] { border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px 10px; background: #fff; min-width: 130px; }
+        .grid { display: grid; grid-template-columns: 420px 1fr; gap: 14px; }
+        .list { max-height: 70vh; overflow: auto; }
+        .item { border-bottom: 1px solid #eef2f7; padding: 10px; cursor: pointer; }
+        .item:not(.anpr-ok):not(.anpr-bad):hover { background: #f8fafc; }
+        .item.active { outline: 2px solid #93c5fd; outline-offset: -2px; }
+        .item.anpr-ok { background: #ecfdf5; }
+        .item.anpr-bad { background: #fee2e2; }
+        .item.anpr-ok:hover { background: #dcfce7; }
+        .item.anpr-bad:hover { background: #fecaca; }
+        .muted { color: #64748b; font-size: 12px; }
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { border: 1px solid #e5e7eb; padding: 6px 8px; vertical-align: top; }
+        .type-row { cursor: pointer; }
+        .type-row:hover { background: #f8fafc; }
+        .card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin: 10px 0; background: #fff; }
+
+        @media (max-width: 980px) {
+            .grid { grid-template-columns: 1fr; }
+            .list { max-height: 42vh; }
+        }
     </style>
 </head>
 <body>
+<th:block th:replace="~{ui/fragments/header :: header('ui')}"></th:block>
+
 <div class="wrap">
-    <div class="left">
-        <div class="top">
-            <button id="toggleBtn">Start capture</button>
-            <button id="clearBtn">Clear browser storage</button>
-            <span class="pill" id="status">stopped</span>
-            <span class="muted">Сохраняется только у тебя в браузере</span>
+    <div class="panel">
+        <div class="row">
+            <button id="startBtn">Start local capture</button>
+            <button id="stopBtn">Stop capture</button>
+            <button id="cleanBtn">Clean browser storage</button>
+            <span id="statusPill" class="pill status-off">stopped</span>
+            <span class="muted" id="modeText">source: /ui/stream</span>
+            <span class="muted" id="countText">events: 0</span>
+            <span class="muted mono" id="storagePath"></span>
         </div>
-        <div id="list"></div>
+        <div class="muted" style="margin-top: 8px;">
+            Capture state lives in this browser tab; saved events remain in IndexedDB until you click clean.
+        </div>
     </div>
 
-    <div class="right">
-        <div id="details" class="muted">Выбери событие слева.</div>
+    <div class="panel">
+        <div style="font-weight: 600; margin-bottom: 8px;">Unique illegal types in local storage</div>
+        <div class="muted" style="margin-bottom: 8px;">Click row to apply filter to events list.</div>
+        <div id="illegalTypes" class="muted">No illegalCode/illegalName found yet.</div>
+    </div>
+
+    <div class="grid">
+        <div class="panel">
+            <div style="font-weight: 600; margin-bottom: 8px;">Saved events</div>
+            <div class="row" style="margin-bottom: 8px;">
+                <input id="codeFilter" type="text" placeholder="filter by illegalCode"/>
+                <input id="nameFilter" type="text" placeholder="filter by illegalName"/>
+                <label class="muted" style="display:flex; align-items:center; gap:6px;">
+                    <input id="violationsOnlyFilter" type="checkbox"/>
+                    violations only
+                </label>
+                <button id="clearFilterBtn" type="button">Clear filter</button>
+                <span id="shownCountText" class="muted">shown: 0</span>
+            </div>
+            <div id="eventList" class="list"></div>
+        </div>
+
+        <div class="panel">
+            <div id="details" class="muted">Select event from the left.</div>
+        </div>
     </div>
 </div>
 
 <script>
-    // ---------------- IndexedDB ----------------
     const DB_NAME = 'hikvision_live_db';
     const DB_VER = 1;
     const STORE = 'events';
+
+    const statusPill = document.getElementById('statusPill');
+    const modeText = document.getElementById('modeText');
+    const countText = document.getElementById('countText');
+    const storagePath = document.getElementById('storagePath');
+    const illegalTypes = document.getElementById('illegalTypes');
+    const codeFilter = document.getElementById('codeFilter');
+    const nameFilter = document.getElementById('nameFilter');
+    const violationsOnlyFilter = document.getElementById('violationsOnlyFilter');
+    const clearFilterBtn = document.getElementById('clearFilterBtn');
+    const shownCountText = document.getElementById('shownCountText');
+    const eventList = document.getElementById('eventList');
+    const details = document.getElementById('details');
+
+    let currentEventId = null;
+    let allEvents = [];
+    let es = null;
+    let running = false;
+    let disconnected = false;
+
+    function esc(s) {
+        return (s ?? '').toString()
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;');
+    }
+
+    function formatTs(ts) {
+        try { return new Date(ts).toLocaleString(); } catch { return ts; }
+    }
+
+    function normalizeIllegalValue(v) {
+        if (v == null) return null;
+        const trimmed = v.toString().trim();
+        return trimmed.length ? trimmed : null;
+    }
+
+    function matchGroups(regex, text) {
+        const values = [];
+        let m;
+        while ((m = regex.exec(text)) !== null) {
+            values.push(m[1]);
+        }
+        return values;
+    }
+
+    function extractIllegalTextInfo(xmlText) {
+        if (!xmlText || !xmlText.trim()) {
+            return { hasIllegalBlocks: false, status: null, illegalTypes: [] };
+        }
+
+        const codeValues = matchGroups(/<\s*illegalCode\s*>\s*([^<\s]+)\s*<\s*\/\s*illegalCode\s*>/gi, xmlText)
+            .map(normalizeIllegalValue)
+            .filter(Boolean);
+        const nameValues = matchGroups(/<\s*illegalName\s*>\s*([^<]+?)\s*<\s*\/\s*illegalName\s*>/gi, xmlText)
+            .map(normalizeIllegalValue)
+            .filter(Boolean);
+
+        const hasIllegalBlocks = codeValues.length > 0 || nameValues.length > 0;
+        if (!hasIllegalBlocks) {
+            return { hasIllegalBlocks: false, status: null, illegalTypes: [] };
+        }
+
+        const max = Math.max(codeValues.length, nameValues.length);
+        const uniq = new Map();
+        for (let i = 0; i < max; i++) {
+            const illegalCode = i < codeValues.length ? codeValues[i] : null;
+            const illegalName = i < nameValues.length ? nameValues[i] : null;
+            if (!illegalCode && !illegalName) continue;
+            uniq.set(`${illegalCode ?? ''}__${illegalName ?? ''}`, { illegalCode, illegalName });
+        }
+
+        let ok = false;
+        for (const codeValue of codeValues) {
+            const code = Number.parseInt(codeValue, 10);
+            if (!Number.isNaN(code) && code === 0) {
+                ok = true;
+                break;
+            }
+        }
+        if (!ok) {
+            for (const nameValue of nameValues) {
+                if ((nameValue ?? '').trim().toLowerCase() === 'normal') {
+                    ok = true;
+                    break;
+                }
+            }
+        }
+
+        return {
+            hasIllegalBlocks: true,
+            status: ok ? 'ok' : 'bad',
+            illegalTypes: [...uniq.values()]
+        };
+    }
+
+    function base64ToBytes(b64) {
+        try {
+            const byteChars = atob(b64 || '');
+            const byteNums = new Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) {
+                byteNums[i] = byteChars.charCodeAt(i);
+            }
+            return new Uint8Array(byteNums);
+        } catch {
+            return new Uint8Array(0);
+        }
+    }
+
+    function decodeTextPreview(part) {
+        if (part?.textPreview && part.textPreview.trim()) {
+            return part.textPreview;
+        }
+        const contentType = (part?.contentType || '').toLowerCase();
+        const filename = (part?.filename || '').toLowerCase();
+        const looksLikeText = contentType.includes('xml') || contentType.includes('json') || contentType.includes('text')
+            || filename.endsWith('.xml') || filename.endsWith('.json') || filename.endsWith('.txt') || filename.endsWith('.csv');
+        if (!looksLikeText) return null;
+
+        const bytes = base64ToBytes(part?.base64 || '');
+        try {
+            return new TextDecoder('utf-8').decode(bytes);
+        } catch {
+            return null;
+        }
+    }
+
+    function analyzeIllegalFromEvent(ev) {
+        const parts = Array.isArray(ev?.parts) ? ev.parts : [];
+        if (!parts.length) {
+            return { anprStatus: null, illegalTypes: [] };
+        }
+
+        let hasIllegalBlocks = false;
+        let hasOk = false;
+        const uniqueTypes = new Map();
+
+        for (const part of parts) {
+            const text = decodeTextPreview(part);
+            const info = extractIllegalTextInfo(text);
+            if (!info.hasIllegalBlocks) {
+                continue;
+            }
+            hasIllegalBlocks = true;
+            if (info.status === 'ok') {
+                hasOk = true;
+            }
+            for (const x of info.illegalTypes) {
+                uniqueTypes.set(`${x.illegalCode ?? ''}__${x.illegalName ?? ''}`, x);
+            }
+        }
+
+        return {
+            anprStatus: hasIllegalBlocks ? (hasOk ? 'ok' : 'bad') : null,
+            illegalTypes: [...uniqueTypes.values()]
+        };
+    }
+
+    function withSummaryFields(ev) {
+        const analysis = analyzeIllegalFromEvent(ev);
+        return {
+            ...ev,
+            partsCount: Array.isArray(ev?.parts) ? ev.parts.length : 0,
+            anprStatus: analysis.anprStatus,
+            illegalTypes: analysis.illegalTypes
+        };
+    }
 
     function openDb() {
         return new Promise((resolve, reject) => {
@@ -101,63 +316,190 @@
         });
     }
 
-    // ---------------- UI helpers ----------------
-    const listEl = document.getElementById('list');
-    const detailsEl = document.getElementById('details');
-    const statusEl = document.getElementById('status');
-    const toggleBtn = document.getElementById('toggleBtn');
-    const clearBtn = document.getElementById('clearBtn');
+    function refreshStatus() {
+        if (!running) {
+            statusPill.textContent = 'stopped';
+            statusPill.className = 'pill status-off';
+        } else if (disconnected) {
+            statusPill.textContent = 'disconnected';
+            statusPill.className = 'pill status-disconnected';
+        } else {
+            statusPill.textContent = 'running';
+            statusPill.className = 'pill status-on';
+        }
 
-    let es = null;
-    let selectedId = null;
-
-    function esc(s) {
-        return (s ?? '').toString()
-            .replaceAll('&', '&amp;').replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+        modeText.textContent = 'source: /ui/stream';
+        countText.textContent = `events: ${allEvents.length}`;
+        storagePath.textContent = `indexeddb://${DB_NAME}/${STORE}`;
     }
 
-    function formatTs(ts) {
-        try { return new Date(ts).toLocaleString(); } catch { return ts; }
-    }
-
-    function renderItem(ev) {
+    function renderEventItem(ev) {
         const div = document.createElement('div');
         div.className = 'item';
         div.dataset.id = ev.id;
+        if (ev.anprStatus === 'ok') {
+            div.classList.add('anpr-ok');
+        } else if (ev.anprStatus === 'bad') {
+            div.classList.add('anpr-bad');
+        }
 
-        const parts = (ev.parts || []).length;
         div.innerHTML = `
-      <div style="font-weight:600;">${esc(formatTs(ev.timestamp))}</div>
-      <div class="muted">${esc(ev.remoteAddr)} • ${esc(ev.method)} ${esc(ev.path)}</div>
-      <div class="muted">ct=${esc(ev.contentType || '')} • parts=${parts}</div>
-    `;
+            <div style="font-weight: 600;">${esc(formatTs(ev.timestamp))}</div>
+            <div class="muted">${esc(ev.remoteAddr)} | ${esc(ev.method)} ${esc(ev.path)}</div>
+            <div class="muted">ct=${esc(ev.contentType || '')} | parts=${esc(ev.partsCount)}</div>
+        `;
 
         div.onclick = async () => {
-            selectedId = ev.id;
-            const full = await dbGetEvent(ev.id);
-            renderDetails(full);
-            [...listEl.querySelectorAll('.item')].forEach(x => x.style.background = '');
-            div.style.background = '#eef6ff';
+            currentEventId = ev.id;
+            [...eventList.querySelectorAll('.item')].forEach((x) => x.classList.remove('active'));
+            div.classList.add('active');
+            await loadEventDetails(ev.id);
         };
 
         return div;
     }
 
-    function kvTable(obj) {
-        const rows = [];
-        for (const [k, v] of Object.entries(obj || {})) {
-            rows.push(`<tr><td style="width:220px"><b>${esc(k)}</b></td><td class="mono">${esc(Array.isArray(v) ? v.join(', ') : v)}</td></tr>`);
+    function normalizeFilterValue(v) {
+        return (v ?? '').toString().trim().toLowerCase();
+    }
+
+    function eventMatchesFilters(ev, codeQuery, nameQuery, violationsOnlyChecked) {
+        if (violationsOnlyChecked && ev.anprStatus !== 'bad') {
+            return false;
         }
-        return `<table>${rows.join('')}</table>`;
+
+        if (!codeQuery && !nameQuery) {
+            return true;
+        }
+
+        const illegal = Array.isArray(ev.illegalTypes) ? ev.illegalTypes : [];
+        if (!illegal.length) {
+            return false;
+        }
+
+        return illegal.some((x) => {
+            const codeValue = (x?.illegalCode ?? '').toString().toLowerCase();
+            const nameValue = (x?.illegalName ?? '').toString().toLowerCase();
+            const codeMatch = !codeQuery || codeValue.includes(codeQuery);
+            const nameMatch = !nameQuery || nameValue.includes(nameQuery);
+            return codeMatch && nameMatch;
+        });
+    }
+
+    async function applyEventFilters() {
+        const codeQuery = normalizeFilterValue(codeFilter.value);
+        const nameQuery = normalizeFilterValue(nameFilter.value);
+        const events = allEvents.filter((ev) => eventMatchesFilters(
+            ev,
+            codeQuery,
+            nameQuery,
+            violationsOnlyFilter.checked
+        ));
+
+        eventList.innerHTML = '';
+        for (const ev of events) {
+            eventList.appendChild(renderEventItem(ev));
+        }
+
+        shownCountText.textContent = `shown: ${events.length}`;
+
+        if (events.length === 0) {
+            const hasFilter = codeQuery.length > 0 || nameQuery.length > 0;
+            details.innerHTML = `<div class="muted">${hasFilter ? 'No events match selected filter.' : 'No events yet.'}</div>`;
+            currentEventId = null;
+            return;
+        }
+
+        if (!currentEventId || !events.find((x) => x.id === currentEventId)) {
+            currentEventId = events[0].id;
+            const first = eventList.querySelector(`.item[data-id="${CSS.escape(currentEventId)}"]`);
+            if (first) first.classList.add('active');
+            await loadEventDetails(currentEventId);
+            return;
+        }
+
+        const active = eventList.querySelector(`.item[data-id="${CSS.escape(currentEventId)}"]`);
+        if (active) active.classList.add('active');
+    }
+
+    async function refreshEvents() {
+        const stored = await dbGetAllEvents();
+        allEvents = stored
+            .map(withSummaryFields)
+            .sort((a, b) => (new Date(b.timestamp) - new Date(a.timestamp)));
+        await applyEventFilters();
+        refreshStatus();
+    }
+
+    function buildIllegalTypesSummary(events) {
+        const counters = new Map();
+        for (const ev of events) {
+            const list = Array.isArray(ev.illegalTypes) ? ev.illegalTypes : [];
+            for (const x of list) {
+                const code = normalizeIllegalValue(x?.illegalCode);
+                const name = normalizeIllegalValue(x?.illegalName);
+                if (!code && !name) {
+                    continue;
+                }
+                const key = `${code ?? ''}__${name ?? ''}`;
+                const prev = counters.get(key);
+                if (!prev) {
+                    counters.set(key, { illegalCode: code, illegalName: name, eventsCount: 1 });
+                } else {
+                    prev.eventsCount += 1;
+                }
+            }
+        }
+
+        return [...counters.values()].sort((a, b) => {
+            if (b.eventsCount !== a.eventsCount) return b.eventsCount - a.eventsCount;
+            const codeCmp = (a.illegalCode ?? '').localeCompare((b.illegalCode ?? ''), undefined, { sensitivity: 'base' });
+            if (codeCmp !== 0) return codeCmp;
+            return (a.illegalName ?? '').localeCompare((b.illegalName ?? ''), undefined, { sensitivity: 'base' });
+        });
+    }
+
+    function renderIllegalTypes(items) {
+        if (!items.length) {
+            illegalTypes.innerHTML = '<div class="muted">No illegalCode/illegalName found yet.</div>';
+            return;
+        }
+
+        const rows = items.map((x) => `
+            <tr class="type-row" data-illegal-code="${esc(x.illegalCode ?? '')}" data-illegal-name="${esc(x.illegalName ?? '')}">
+                <td class="mono">${esc(x.illegalCode ?? '-')}</td>
+                <td class="mono">${esc(x.illegalName ?? '-')}</td>
+                <td>${esc(x.eventsCount ?? 0)}</td>
+            </tr>
+        `).join('');
+
+        illegalTypes.innerHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 180px;">illegalCode</th>
+                        <th>illegalName</th>
+                        <th style="width: 140px;">events</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        `;
+    }
+
+    function refreshIllegalTypes() {
+        renderIllegalTypes(buildIllegalTypesSummary(allEvents));
+    }
+
+    function headerTable(headers) {
+        const rows = Object.entries(headers || {})
+            .map(([k, v]) => `<tr><td style="width: 220px;"><b>${esc(k)}</b></td><td class="mono">${esc(Array.isArray(v) ? v.join(', ') : v)}</td></tr>`)
+            .join('');
+        return `<table>${rows}</table>`;
     }
 
     function base64ToBlob(b64, contentType) {
-        const byteChars = atob(b64);
-        const byteNums = new Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
-        const byteArray = new Uint8Array(byteNums);
-        return new Blob([byteArray], { type: contentType || 'application/octet-stream' });
+        return new Blob([base64ToBytes(b64)], { type: contentType || 'application/octet-stream' });
     }
 
     async function downloadPart(eventId, idx) {
@@ -183,132 +525,137 @@
 
     function renderParts(ev) {
         const parts = ev.parts || [];
-        if (!parts.length) return `<div class="muted">No parts</div>`;
+        if (!parts.length) return '<div class="muted">No parts</div>';
 
-        return parts.map((p, idx) => {
-            const text = p.textPreview
-                ? `<div><div class="muted">TEXT</div><div class="mono">${esc(p.textPreview)}</div></div>`
-                : '';
-
-            return `
-        <div class="card">
-          <div class="row">
-            <span class="pill">${esc(p.name)}</span>
-            ${p.filename ? `<span class="pill">fn=${esc(p.filename)}</span>` : ''}
-            <span class="pill">${esc(p.contentType || 'octet-stream')}</span>
-            <span class="pill">size=${esc(p.size)}</span>
-            <button onclick="downloadPart('${esc(ev.id)}', ${idx})">Download</button>
-          </div>
-          ${text}
-          ${!text ? `<div class="muted">base64 stored (download available)</div>` : ''}
-        </div>
-      `;
-        }).join('');
+        return parts.map((p, idx) => `
+            <div class="card">
+                <div class="row">
+                    <span class="pill">${esc(p.name || 'part')}</span>
+                    <span class="pill">${esc(p.contentType || 'application/octet-stream')}</span>
+                    <span class="pill">size=${esc(p.size)}</span>
+                    <button onclick="downloadPart('${esc(ev.id)}', ${idx})">Download</button>
+                </div>
+                ${p.filename ? `<div class="muted">camera file: ${esc(p.filename)}</div>` : ''}
+                ${p.textPreview ? `<div class="mono" style="margin-top:6px;">${esc(p.textPreview)}</div>` : ''}
+            </div>
+        `).join('');
     }
 
-    function renderDetails(ev) {
+    async function loadEventDetails(id) {
+        const ev = await dbGetEvent(id);
         if (!ev) {
-            detailsEl.innerHTML = `<div class="muted">Not found</div>`;
+            details.innerHTML = '<div class="muted">Event not found.</div>';
             return;
         }
 
-        detailsEl.innerHTML = `
-      <div style="font-weight:700; font-size:18px;">Event</div>
-      <div class="row" style="margin:8px 0 14px;">
-        <span class="pill">${esc(formatTs(ev.timestamp))}</span>
-        <span class="pill">${esc(ev.remoteAddr)}</span>
-        <span class="pill">${esc(ev.method)} ${esc(ev.path)}</span>
-        <span class="pill">ct=${esc(ev.contentType || '')}</span>
-      </div>
-
-      <h3 style="margin:14px 0 8px;">Headers</h3>
-      ${kvTable(ev.headers || {})}
-
-      <h3 style="margin:14px 0 8px;">Parts</h3>
-      ${renderParts(ev)}
-    `;
+        details.innerHTML = `
+            <div style="font-weight:700; font-size:18px;">Event ${esc(ev.id)}</div>
+            <div class="row" style="margin: 8px 0 14px;">
+                <span class="pill">${esc(formatTs(ev.timestamp))}</span>
+                <span class="pill">${esc(ev.remoteAddr || '')}</span>
+                <span class="pill">${esc(ev.method || '')} ${esc(ev.path || '')}</span>
+                <span class="pill">ct=${esc(ev.contentType || '')}</span>
+            </div>
+            <h3 style="margin: 14px 0 8px;">Headers</h3>
+            ${headerTable(ev.headers)}
+            <h3 style="margin: 14px 0 8px;">Saved files</h3>
+            ${renderParts(ev)}
+        `;
     }
 
-    async function reloadListFromDb() {
-        const all = await dbGetAllEvents();
-        // сортировка newest-first
-        all.sort((a, b) => (new Date(b.timestamp) - new Date(a.timestamp)));
-
-        listEl.innerHTML = '';
-        for (const ev of all) {
-            const item = renderItem(ev);
-            listEl.appendChild(item);
-        }
-
-        if (all.length && !selectedId) {
-            selectedId = all[0].id;
-            const first = await dbGetEvent(selectedId);
-            renderDetails(first);
-            const firstEl = listEl.querySelector(`.item[data-id="${selectedId}"]`);
-            if (firstEl) firstEl.style.background = '#eef6ff';
-        }
+    async function handleIncomingEvent(rawEvent) {
+        await dbPutEvent(rawEvent);
+        await refreshEvents();
+        refreshIllegalTypes();
     }
 
-    // делаем downloadPart доступным из inline onclick
-    window.downloadPart = downloadPart;
-
-    // ---------------- Capture toggle ----------------
-    function startCapture() {
-        if (es) return;
-
-        statusEl.textContent = 'connecting…';
-        toggleBtn.textContent = 'Stop capture';
+    function openStreamIfNeeded() {
+        if (es) {
+            return;
+        }
 
         es = new EventSource('/ui/stream');
-
         es.addEventListener('open', () => {
-            statusEl.textContent = 'running';
+            disconnected = false;
+            refreshStatus();
         });
 
         es.addEventListener('error', () => {
-            statusEl.textContent = 'disconnected';
+            disconnected = true;
+            refreshStatus();
         });
 
         es.addEventListener('event', async (e) => {
-            const ev = JSON.parse(e.data);
-
-            // сохраняем ТОЛЬКО в браузере
-            await dbPutEvent(ev);
-
-            // обновляем список (быстро: просто prepend)
-            const item = renderItem(ev);
-            listEl.prepend(item);
-
-            if (!selectedId) {
-                selectedId = ev.id;
-                item.style.background = '#eef6ff';
-                renderDetails(ev);
+            try {
+                const ev = JSON.parse(e.data);
+                await handleIncomingEvent(ev);
+            } catch {
+                // ignore malformed event
             }
         });
     }
 
-    function stopCapture() {
-        if (!es) return;
-        es.close();
-        es = null;
-        statusEl.textContent = 'stopped';
-        toggleBtn.textContent = 'Start capture';
+    function startCapture() {
+        running = true;
+        disconnected = false;
+        openStreamIfNeeded();
+        refreshStatus();
     }
 
-    toggleBtn.onclick = () => {
-        if (es) stopCapture();
-        else startCapture();
+    function stopCapture() {
+        running = false;
+        disconnected = false;
+        if (es) {
+            es.close();
+            es = null;
+        }
+        refreshStatus();
+    }
+
+    document.getElementById('startBtn').onclick = () => {
+        startCapture();
     };
 
-    clearBtn.onclick = async () => {
+    document.getElementById('stopBtn').onclick = () => {
+        stopCapture();
+    };
+
+    document.getElementById('cleanBtn').onclick = async () => {
         await dbClear();
-        selectedId = null;
-        detailsEl.innerHTML = `<div class="muted">Storage cleared.</div>`;
-        await reloadListFromDb();
+        currentEventId = null;
+        await refreshEvents();
+        refreshIllegalTypes();
     };
 
-    // Initial load (показать уже сохранённые в браузере)
-    reloadListFromDb();
+    codeFilter.oninput = () => { applyEventFilters(); };
+    nameFilter.oninput = () => { applyEventFilters(); };
+    clearFilterBtn.onclick = () => {
+        codeFilter.value = '';
+        nameFilter.value = '';
+        violationsOnlyFilter.checked = false;
+        applyEventFilters();
+    };
+    violationsOnlyFilter.onchange = () => { applyEventFilters(); };
+
+    illegalTypes.onclick = (e) => {
+        const row = e.target.closest('.type-row');
+        if (!row || !illegalTypes.contains(row)) {
+            return;
+        }
+        codeFilter.value = row.dataset.illegalCode ?? '';
+        nameFilter.value = row.dataset.illegalName ?? '';
+        applyEventFilters();
+    };
+
+    window.downloadPart = downloadPart;
+
+    async function boot() {
+        await refreshEvents();
+        refreshIllegalTypes();
+        refreshStatus();
+    }
+
+    boot();
 </script>
 </body>
 </html>

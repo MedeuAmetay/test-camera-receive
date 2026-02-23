@@ -13,6 +13,11 @@ public class UiController {
 
     private final LiveEventHub hub;
 
+    @GetMapping("/")
+    public String home() {
+        return "ui/home";
+    }
+
     @GetMapping("/ui")
     public String ui() {
         return "ui/index";

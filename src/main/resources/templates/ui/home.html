@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Hikvision Event Modes</title>
+    <th:block th:replace="~{ui/fragments/header :: styles}"></th:block>
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: system-ui, Arial, sans-serif;
+            background: #f5f7fb;
+            color: #111;
+        }
+
+        .layout {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .panel {
+            margin-bottom: 18px;
+            padding: 14px;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            background: #fff;
+        }
+
+        .title {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            margin: 10px 0 0;
+            color: #64748b;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .option {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            background: #fff;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .option h2 {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .option p {
+            margin: 0;
+            color: #64748b;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .pill {
+            display: inline-block;
+            width: fit-content;
+            padding: 4px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 999px;
+            font-size: 12px;
+            color: #334155;
+            background: #f8fafc;
+        }
+
+        .btn {
+            margin-top: auto;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #fff;
+            color: #111;
+            text-decoration: none;
+            text-align: center;
+            font-weight: 500;
+            padding: 10px 12px;
+            cursor: pointer;
+        }
+
+        .btn:hover {
+            background: #f8fafc;
+        }
+
+        @media (max-width: 860px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<th:block th:replace="~{ui/fragments/header :: header('home')}"></th:block>
+<main class="layout">
+    <section class="panel">
+        <h1 class="title">Выбор режима получения событий</h1>
+        <p class="subtitle">
+            Выберите, где хранить полученные события Hikvision:
+            локально в браузере или на сервере с сохранением файлов.
+        </p>
+    </section>
+
+    <section class="grid">
+        <article class="option">
+            <span class="pill">UI / Local</span>
+            <h2>Локально в браузере</h2>
+            <p>Страница <code>/ui</code> получает поток и сохраняет его в IndexedDB только у тебя в браузере.</p>
+            <p>Подходит для быстрого просмотра, без записи данных на сервер.</p>
+            <a class="btn" href="/ui">Открыть UI</a>
+        </article>
+
+        <article class="option">
+            <span class="pill">Capture / Server</span>
+            <h2>События на сервер</h2>
+            <p>Страница <code>/capture</code> включает серверный capture и хранит события и файлы на диске сервера.</p>
+            <p>Подходит для длительного сбора, анализа и выгрузки сохранённых файлов.</p>
+            <a class="btn" href="/capture">Открыть Capture</a>
+        </article>
+    </section>
+</main>
+</body>
+</html>

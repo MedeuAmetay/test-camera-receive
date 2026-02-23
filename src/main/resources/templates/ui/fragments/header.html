@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<body>
+<th:block th:fragment="styles">
+    <style>
+        .site-header {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            border-bottom: 1px solid #e2e8f0;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(6px);
+        }
+
+        .site-header-inner {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .site-brand {
+            font-weight: 700;
+            color: #0f172a;
+            text-decoration: none;
+            letter-spacing: .2px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid #cbd5e1;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            box-shadow: 0 1px 0 rgba(148, 163, 184, 0.16);
+        }
+
+        .site-nav {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .site-link {
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 6px 10px;
+            background: #fff;
+            color: #0f172a;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .site-link:hover {
+            background: #f8fafc;
+        }
+
+        .site-link.active {
+            background: #ecfeff;
+            border-color: #67e8f9;
+            color: #155e75;
+        }
+
+        @media (max-width: 720px) {
+            .site-header-inner {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+    </style>
+</th:block>
+
+<header th:fragment="header(activePage)" class="site-header">
+    <div class="site-header-inner">
+        <a class="site-brand" href="/">Hikvision Events</a>
+        <nav class="site-nav">
+            <a href="/" class="site-link" th:classappend="${activePage == 'home'} ? ' active' : ''">Home</a>
+            <a href="/ui" class="site-link" th:classappend="${activePage == 'ui'} ? ' active' : ''">UI (local)</a>
+            <a href="/capture" class="site-link" th:classappend="${activePage == 'capture'} ? ' active' : ''">Capture (server)</a>
+        </nav>
+    </div>
+</header>
+</body>
+</html>
